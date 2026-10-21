@@ -5,7 +5,7 @@ Macro Play is a no-code desktop recorder for repetitive computer work. It captur
 ## What it does
 
 - Records mouse moves, clicks, drags, and scroll-wheel input anywhere on the desktop.
-- Provides numbered red macro slots, ten at a time, with left/right paging for additional macros.
+- Provides compact numbered red macro slots that responsively fit the window, with always-visible left/right paging.
 - Records normal typing as readable **Type text** actions and preserves modifier/special-key presses.
 - Consolidates hundreds of raw mouse coordinates into one editable move between interactions.
 - Tracks the active window's title, position, and size and restores it during playback.
@@ -41,7 +41,7 @@ On macOS, grant **Accessibility** permission to Terminal (for source runs) or Ma
 6. Assign a hotkey to the selected slot, then choose another numbered slot and repeat.
 7. Use **Save** to store each macro as a `.macro.json` file.
 
-The selector displays ten red macro buttons at a time. Use the left and right arrow buttons to move between Macro 1–10, 11–20, and higher ranges. Each slot keeps its own timeline, file, unsaved state, and hotkey for the current session. An asterisk marks an unsaved slot.
+The selector displays up to ten compact red macro buttons, automatically showing fewer on a narrower screen or window so both arrow buttons remain visible. Use the arrows to move to higher or lower numbered ranges. Each slot keeps its own timeline, file, unsaved state, and hotkey for the current session. An asterisk marks an unsaved slot.
 
 To give several actions the same timing, select their rows with **Ctrl-click** or **Shift-click**, choose **Set wait** or **Set length**, enter the time once, and press **OK**. Every selected action is updated together.
 

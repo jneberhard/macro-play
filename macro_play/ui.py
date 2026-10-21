@@ -512,15 +512,24 @@ class HelpDialog(tk.Toplevel):
 
 
 class MacroPlayApp:
+    MACRO_BUTTON_TARGET_WIDTH = 76
+    MAX_VISIBLE_MACRO_SLOTS = 10
+    MIN_VISIBLE_MACRO_SLOTS = 2
+
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Macro Play")
-        self.root.geometry("1180x760")
-        self.root.minsize(980, 650)
+        available_width = max(720, self.root.winfo_screenwidth() - 80)
+        available_height = max(620, self.root.winfo_screenheight() - 100)
+        window_width = min(1180, available_width)
+        window_height = min(760, available_height)
+        self.root.geometry(f"{window_width}x{window_height}")
+        self.root.minsize(min(820, window_width), min(620, window_height))
         self.root.configure(bg=BG)
         self.settings = reset_settings_for_startup()
         self.active_macro_number = 1
         self.macro_page_start = 1
+        self.visible_macro_slots = self.MAX_VISIBLE_MACRO_SLOTS
         self.macro_slots: dict[int, MacroSlot] = {
             1: MacroSlot(number=1, hotkey=DEFAULT_PLAY_HOTKEY),
         }
@@ -555,9 +564,9 @@ class MacroPlayApp:
         style.map("Accent.TButton", background=[("active", ACCENT_HOVER), ("disabled", "#42377b")])
         style.configure("Record.TButton", background=RED, foreground="white", borderwidth=0, padding=(16, 9), font=("Segoe UI Semibold", 10))
         style.map("Record.TButton", background=[("active", "#ff7184")])
-        style.configure("Macro.TButton", background="#a52d42", foreground="white", borderwidth=1, padding=(7, 7), font=("Segoe UI Semibold", 9))
+        style.configure("Macro.TButton", background="#a52d42", foreground="white", borderwidth=1, padding=(4, 5), font=("Segoe UI Semibold", 8))
         style.map("Macro.TButton", background=[("active", "#c43a51")])
-        style.configure("SelectedMacro.TButton", background=RED, foreground="white", borderwidth=2, padding=(7, 7), font=("Segoe UI Semibold", 9))
+        style.configure("SelectedMacro.TButton", background=RED, foreground="white", borderwidth=2, padding=(4, 5), font=("Segoe UI Semibold", 8))
         style.map("SelectedMacro.TButton", background=[("active", "#ff7184")])
         style.configure("Treeview", background=PANEL, fieldbackground=PANEL, foreground=TEXT, borderwidth=0, rowheight=38)
         style.configure("Treeview.Heading", background=PANEL_2, foreground=MUTED, borderwidth=0, padding=(8, 10), font=("Segoe UI Semibold", 9))
@@ -585,16 +594,16 @@ class MacroPlayApp:
 
         selector = tk.Frame(self.root, bg=PANEL, padx=16, pady=8, highlightbackground=BORDER, highlightthickness=1)
         selector.pack(fill="x", padx=28, pady=(0, 10))
-        self.macro_page_label = tk.Label(selector, text="", bg=PANEL, fg=MUTED, width=9, font=("Segoe UI Semibold", 8))
+        self.macro_page_label = tk.Label(selector, text="", bg=PANEL, fg=MUTED, width=7, font=("Segoe UI Semibold", 8))
         self.macro_page_label.pack(side="left", padx=(0, 6))
         self.macro_left_btn = ttk.Button(selector, text="‹", width=3, command=lambda: self._scroll_macro_slots(-1))
         self.macro_left_btn.pack(side="left", padx=(0, 6))
-        macro_buttons = tk.Frame(selector, bg=PANEL)
-        macro_buttons.pack(side="left", fill="x", expand=True)
+        self.macro_buttons_frame = tk.Frame(selector, bg=PANEL)
+        self.macro_buttons_frame.pack(side="left", fill="x", expand=True)
+        self.macro_buttons_frame.bind("<Configure>", self._resize_macro_selector)
         self.macro_slot_buttons: list[ttk.Button] = []
-        for offset in range(10):
-            button = ttk.Button(macro_buttons, text="", style="Macro.TButton")
-            button.pack(side="left", fill="x", expand=True, padx=2)
+        for _offset in range(self.MAX_VISIBLE_MACRO_SLOTS):
+            button = ttk.Button(self.macro_buttons_frame, text="", style="Macro.TButton", width=7)
             self.macro_slot_buttons.append(button)
         self.macro_right_btn = ttk.Button(selector, text="›", width=3, command=lambda: self._scroll_macro_slots(1))
         self.macro_right_btn.pack(side="left", padx=(6, 0))
@@ -738,10 +747,12 @@ class MacroPlayApp:
     def _render_macro_selector(self) -> None:
         if not hasattr(self, "macro_slot_buttons"):
             return
-        end = self.macro_page_start + 9
+        end = self.macro_page_start + self.visible_macro_slots - 1
         self.macro_page_label.configure(text=f"{self.macro_page_start}–{end}")
         self.macro_left_btn.configure(state="disabled" if self.macro_page_start == 1 else "normal")
-        for offset, button in enumerate(self.macro_slot_buttons):
+        for button in self.macro_slot_buttons:
+            button.pack_forget()
+        for offset, button in enumerate(self.macro_slot_buttons[:self.visible_macro_slots]):
             number = self.macro_page_start + offset
             slot = self._slot(number)
             marker = "*" if slot.dirty else ""
@@ -750,9 +761,27 @@ class MacroPlayApp:
                 command=lambda selected=number: self._switch_macro_slot(selected),
                 style="SelectedMacro.TButton" if number == self.active_macro_number else "Macro.TButton",
             )
+            button.pack(side="left", fill="x", expand=True, padx=2)
+
+    @classmethod
+    def _calculate_visible_macro_slots(cls, available_width: int) -> int:
+        return max(
+            cls.MIN_VISIBLE_MACRO_SLOTS,
+            min(cls.MAX_VISIBLE_MACRO_SLOTS, available_width // cls.MACRO_BUTTON_TARGET_WIDTH),
+        )
+
+    def _resize_macro_selector(self, event: tk.Event) -> None:
+        visible = self._calculate_visible_macro_slots(int(event.width))
+        if visible == self.visible_macro_slots:
+            return
+        old_end = self.macro_page_start + self.visible_macro_slots - 1
+        anchor = self.active_macro_number if self.macro_page_start <= self.active_macro_number <= old_end else self.macro_page_start
+        self.visible_macro_slots = visible
+        self.macro_page_start = ((anchor - 1) // visible) * visible + 1
+        self._render_macro_selector()
 
     def _scroll_macro_slots(self, direction: int) -> None:
-        self.macro_page_start = max(1, self.macro_page_start + (10 * direction))
+        self.macro_page_start = max(1, self.macro_page_start + (self.visible_macro_slots * direction))
         self._render_macro_selector()
 
     def _switch_macro_slot(self, number: int, *, force: bool = False) -> None:

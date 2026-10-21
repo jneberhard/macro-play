@@ -25,7 +25,7 @@ Playback settings control the macro name, repeat count, continuous looping, play
     ),
     (
         "Numbered macro selector",
-        """The red buttons across the top are independent macro slots. Ten buttons are visible at a time. Use the left and right arrow buttons to move between Macro 1–10, Macro 11–20, and higher ranges.
+        """The compact red buttons across the top are independent macro slots. Up to ten buttons are visible at a time. On smaller screens or when the window is narrowed, Macro Play automatically shows fewer buttons so the left and right arrows always remain on screen. Use those arrows to move to higher or lower numbered ranges.
 
 Select a slot before recording or opening a file. Each slot keeps its own action timeline, loaded file, unsaved state, and hotkey for the current session. Switching slots does not erase unsaved work. An asterisk on a button means that slot has unsaved changes.
 
