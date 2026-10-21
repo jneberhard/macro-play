@@ -9,6 +9,7 @@ from macro_play.hotkeys import (
     display_to_binding,
     hotkey_from_keypress,
     prepare_hotkey_assignments,
+    reset_settings_for_startup,
 )
 
 
@@ -85,6 +86,21 @@ class HotkeySettingsTests(unittest.TestCase):
             path.write_text('{"play_hotkey": "Ctrl + F8"}', encoding="utf-8")
             restored = AppSettings.load(path)
         self.assertEqual(restored.play_hotkey, DEFAULT_PLAY_HOTKEY)
+
+    def test_startup_clears_previous_hotkeys_and_macro_assignments(self):
+        previous = AppSettings(
+            play_hotkey="Ctrl + Alt + P",
+            macro_hotkeys=[MacroHotkeyBinding("F10", "old.macro.json", "Old macro", "old")],
+        )
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            path = Path(folder) / "settings.json"
+            previous.save(path)
+            active = reset_settings_for_startup(path)
+            saved = AppSettings.load(path)
+        self.assertEqual(active.play_hotkey, DEFAULT_PLAY_HOTKEY)
+        self.assertEqual(active.macro_hotkeys, [])
+        self.assertEqual(saved.play_hotkey, DEFAULT_PLAY_HOTKEY)
+        self.assertEqual(saved.macro_hotkeys, [])
 
 
 if __name__ == "__main__":

@@ -35,14 +35,14 @@ Select an action and choose **Edit**, or double-click it. Depending on the actio
 
 Selecting a mouse action displays a temporary crosshair at its recorded position without moving or clicking the pointer.
 
-### Set the wait time on several actions
+### Set the wait time or length on several actions
 
 1. Select the first action.
 2. Use **Ctrl-click** to add individual actions or **Shift-click** to select a range.
-3. Select **Set wait**.
+3. Select **Set wait** or **Set length**.
 4. Enter the time in seconds and select **OK**.
 
-Every selected action receives the same pre-action wait. Other settings remain unchanged. Enter `0` to remove the added pause.
+Every selected action receives the same value. Other settings remain unchanged. **Wait** is the pause before an action. **Length** controls duration for supported actions such as mouse movement, click holds, and explicit Wait actions. Enter `0` to remove a pause or make a supported action complete immediately.
 
 ## Playback
 
@@ -56,7 +56,7 @@ Playback sends real mouse and keyboard input. Avoid touching the mouse or typing
 
 ### Current macro
 
-The current macro hotkey plays the macro open in the editor. Select **Change**, then physically press the desired combination. Letters and numbers require Ctrl, Alt, Shift, or Cmd. Select **Disable hotkey** to turn it off. F8 and Ctrl+F8 are reserved for emergency stop.
+The current macro hotkey plays the macro open in the editor. Opening a macro file immediately makes that loaded macro the shortcut's target. Select **Change**, then physically press the desired combination. Letters and numbers require Ctrl, Alt, Shift, or Cmd. Select **Disable hotkey** to turn it off. F8 and Ctrl+F8 are reserved for emergency stop. Custom hotkeys are cleared and Ctrl+F9 is restored whenever Macro Play starts.
 
 ### Several saved macros
 
@@ -66,7 +66,7 @@ The current macro hotkey plays the macro open in the editor. Select **Change**, 
 4. Press the desired shortcut.
 5. Repeat as needed and select **Save**.
 
-Macro Play must remain running. An assigned macro is read from its file whenever its hotkey is pressed, without replacing unsaved editor work. It uses the repeat, loop, speed, and window-restore settings currently displayed. If a file is moved, remove its missing assignment and add it from the new location.
+Macro Play must remain running. An assigned macro is read from its file whenever its hotkey is pressed, without replacing unsaved editor work. It uses the repeat, loop, speed, and window-restore settings currently displayed. Saved-macro assignments are session-only and are cleared at the next startup; the `.macro.json` files are never deleted.
 
 ## Files
 

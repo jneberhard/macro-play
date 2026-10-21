@@ -15,6 +15,7 @@ from .hotkeys import (
     MODIFIER_ORDER,
     hotkey_from_keypress,
     prepare_hotkey_assignments,
+    reset_settings_for_startup,
 )
 from .help_content import HELP_SECTIONS
 from .player import MacroPlayer
@@ -523,7 +524,7 @@ class MacroPlayApp:
         self._playback_actions: list[Action] = []
         self._playback_name = ""
         self._highlight_playback = True
-        self.settings = AppSettings.load()
+        self.settings = reset_settings_for_startup()
         self._hotkey_events: queue.SimpleQueue[str] = queue.SimpleQueue()
         self.hotkey_manager = GlobalHotkeyRegistry(self._hotkey_events.put)
         self.cursor_preview = CursorTargetPreview(root)
@@ -604,13 +605,19 @@ class MacroPlayApp:
 
         tools = tk.Frame(editor, bg=PANEL_2, padx=10, pady=8)
         tools.grid(row=1, column=0, sticky="ew")
+        primary_tools = tk.Frame(tools, bg=PANEL_2)
+        primary_tools.pack(fill="x")
         for text, command in [
-            ("＋ Add", self._add), ("Edit", self._edit), ("Set wait…", self._set_wait_for_selected),
-            ("Duplicate", self._duplicate),
+            ("＋ Add", self._add), ("Edit", self._edit), ("Duplicate", self._duplicate),
             ("↑", lambda: self._move(-1)), ("↓", lambda: self._move(1)), ("Delete", self._delete),
         ]:
-            ttk.Button(tools, text=text, command=command).pack(side="left", padx=3)
-        ttk.Button(tools, text="Enable / disable", command=self._toggle_enabled).pack(side="right", padx=3)
+            ttk.Button(primary_tools, text=text, command=command).pack(side="left", padx=3)
+        ttk.Button(primary_tools, text="Enable / disable", command=self._toggle_enabled).pack(side="right", padx=3)
+        timing_tools = tk.Frame(tools, bg=PANEL_2)
+        timing_tools.pack(fill="x", pady=(7, 0))
+        tk.Label(timing_tools, text="SELECTED ACTIONS", bg=PANEL_2, fg=MUTED, font=("Segoe UI Semibold", 8)).pack(side="left", padx=(4, 8))
+        ttk.Button(timing_tools, text="Set wait…", command=self._set_wait_for_selected).pack(side="left", padx=3)
+        ttk.Button(timing_tools, text="Set length…", command=self._set_length_for_selected).pack(side="left", padx=3)
 
         tree_wrap = tk.Frame(editor, bg=PANEL)
         tree_wrap.grid(row=2, column=0, sticky="nsew")
@@ -960,6 +967,12 @@ class MacroPlayApp:
             self._refresh(dialog.result.id)
 
     def _set_wait_for_selected(self) -> None:
+        self._set_time_for_selected("wait")
+
+    def _set_length_for_selected(self) -> None:
+        self._set_time_for_selected("length")
+
+    def _set_time_for_selected(self, field: str) -> None:
         selected_ids = list(self.tree.selection())
         if not selected_ids:
             messagebox.showinfo(
@@ -970,11 +983,13 @@ class MacroPlayApp:
             return
         selected_id_set = set(selected_ids)
         selected_actions = [action for action in self.macro.actions if action.id in selected_id_set]
-        waits = {action.delay for action in selected_actions}
-        initial = next(iter(waits)) if len(waits) == 1 else 0.0
+        is_wait = field == "wait"
+        values = {action.delay if is_wait else action.duration for action in selected_actions}
+        initial = next(iter(values)) if len(values) == 1 else 0.0
+        label = "wait time" if is_wait else "length"
         seconds = simpledialog.askfloat(
-            "Set wait time",
-            f"Wait before each of the {len(selected_ids)} selected action{'s' if len(selected_ids) != 1 else ''} (seconds):",
+            f"Set {label}",
+            f"{label.title()} for each of the {len(selected_ids)} selected action{'s' if len(selected_ids) != 1 else ''} (seconds):",
             parent=self.root,
             initialvalue=initial,
             minvalue=0.0,
@@ -983,14 +998,17 @@ class MacroPlayApp:
         if seconds is None:
             return
         try:
-            changed = self.macro.set_wait_time(selected_id_set, seconds)
+            changed = (
+                self.macro.set_wait_time(selected_id_set, seconds)
+                if is_wait else self.macro.set_length(selected_id_set, seconds)
+            )
         except ValueError as exc:
-            messagebox.showerror("Invalid wait time", str(exc), parent=self.root)
+            messagebox.showerror(f"Invalid {label}", str(exc), parent=self.root)
             return
         if changed:
             self._set_dirty(True)
             self._refresh(selected_ids)
-            self.control_hint.configure(text=f"Set wait time to {seconds:.2f}s on {changed} action{'s' if changed != 1 else ''}")
+            self.control_hint.configure(text=f"Set {label} to {seconds:.2f}s on {changed} action{'s' if changed != 1 else ''}")
 
     def _duplicate(self) -> None:
         selected = self._selected_indices()
@@ -1063,6 +1081,7 @@ class MacroPlayApp:
             self.name_var.set(self.macro.name)
             self._set_dirty(False)
             self._refresh()
+            self.control_hint.configure(text=f"Loaded {self.file_path.name} — the current macro hotkey will play this file")
         except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
             messagebox.showerror("Could not open macro", str(exc))
 

@@ -58,6 +58,22 @@ class MacroModelTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "between 0"):
             macro.set_wait_time({macro.actions[0].id}, -1)
 
+    def test_set_length_updates_only_selected_actions(self):
+        first = Action("mouse_move", duration=0.1)
+        second = Action("mouse_click", duration=0.2)
+        third = Action("wait", duration=0.3)
+        macro = Macro(actions=[first, second, third])
+
+        changed = macro.set_length({first.id, third.id}, 2.5)
+
+        self.assertEqual(changed, 2)
+        self.assertEqual([action.duration for action in macro.actions], [2.5, 0.2, 2.5])
+
+    def test_set_length_rejects_invalid_value(self):
+        macro = Macro(actions=[Action("wait")])
+        with self.assertRaisesRegex(ValueError, "non-negative"):
+            macro.set_length({macro.actions[0].id}, float("inf"))
+
 
 if __name__ == "__main__":
     unittest.main()

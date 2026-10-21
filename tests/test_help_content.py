@@ -14,7 +14,7 @@ class HelpContentTests(unittest.TestCase):
         for required in (
             "Record a macro",
             "Edit actions",
-            "Set several wait times",
+            "Set wait times and lengths",
             "Saved macro hotkeys",
             "Ctrl+F8",
             ".macro.json",

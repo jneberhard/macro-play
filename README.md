@@ -9,7 +9,7 @@ Macro Play is a no-code desktop recorder for repetitive computer work. It captur
 - Consolidates hundreds of raw mouse coordinates into one editable move between interactions.
 - Tracks the active window's title, position, and size and restores it during playback.
 - Lets you add, edit, duplicate, reorder, disable, or delete actions without writing code.
-- Bulk-edits the wait time for any group of selected timeline actions.
+- Bulk-edits the wait time or length for any group of selected timeline actions.
 - Supports adjustable playback speed, pause/resume, up to 999 repeats, or looping until stopped.
 - Provides a selectable global Play hotkey that works while another application has focus.
 - Assigns separate global hotkeys to any number of saved macros, so the right workflow plays instantly.
@@ -39,11 +39,11 @@ On macOS, grant **Accessibility** permission to Terminal (for source runs) or Ma
 5. Choose repeat count and playback speed, then press **Play**.
 6. Use **Save** to store the macro as a `.macro.json` file.
 
-To give several actions the same wait time, select their rows with **Ctrl-click** or **Shift-click**, choose **Set wait**, enter the time once, and press **OK**. Every selected action is updated together.
+To give several actions the same timing, select their rows with **Ctrl-click** or **Shift-click**, choose **Set wait** or **Set length**, enter the time once, and press **OK**. Every selected action is updated together.
 
-Under **Playback settings → Play hotkey**, click **Change** and physically press the shortcut you want. Macro Play accepts modifier combinations, function keys, and navigation keys. The default is **Ctrl+F9**, and your selection is remembered after restarting the app.
+Under **Playback settings → Current macro hotkey**, click **Change** and physically press the shortcut you want. Macro Play accepts modifier combinations, function keys, and navigation keys. The current macro shortcut starts as **Ctrl+F9** each time the app opens. When you open a macro file, this shortcut plays that loaded macro.
 
-To control several macros, save each recording first, then select **Saved macro hotkeys**. Choose **Add saved macro**, select its `.macro.json` file, and press the shortcut you want to assign. Repeat for every macro. While Macro Play is running, each shortcut plays its assigned file without replacing the macro currently open in the editor. Assigned macros use the repeat, loop, speed, and window-restore settings currently shown in the app.
+To control several macros during the current session, save each recording first, then select **Saved macro hotkeys**. Choose **Add saved macro**, select its `.macro.json` file, and press the shortcut you want to assign. Repeat for every macro. While Macro Play is running, each shortcut plays its assigned file without replacing the macro currently open in the editor. Assigned macros use the repeat, loop, speed, and window-restore settings currently shown in the app. Custom hotkeys and saved-macro assignments are cleared the next time Macro Play starts; the `.macro.json` files themselves are never deleted.
 
 Press **Ctrl+F8** at any time during playback for an emergency stop, even when another application has focus.
 

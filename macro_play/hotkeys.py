@@ -155,6 +155,17 @@ class AppSettings:
         path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
 
 
+def reset_settings_for_startup(path: Path | None = None) -> AppSettings:
+    """Start with no previous custom hotkeys or saved-macro assignments."""
+    settings = AppSettings()
+    try:
+        settings.save(path)
+    except OSError:
+        # The app can still use clean in-memory defaults if settings cannot be written.
+        pass
+    return settings
+
+
 def prepare_hotkey_assignments(assignments: dict[str, str]) -> dict[str, str]:
     """Convert token/display assignments into unique pynput binding/token pairs."""
     prepared: dict[str, str] = {}

@@ -116,6 +116,21 @@ class Macro:
                 changed += 1
         return changed
 
+    def set_length(self, action_ids: set[str], seconds: float) -> int:
+        """Set the duration/length for every action whose ID is selected."""
+        try:
+            length = float(seconds)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Length must be a non-negative number of seconds.") from exc
+        if not math.isfinite(length) or length < 0.0:
+            raise ValueError("Length must be a non-negative number of seconds.")
+        changed = 0
+        for action in self.actions:
+            if action.id in action_ids:
+                action.duration = length
+                changed += 1
+        return changed
+
     def to_dict(self) -> dict[str, Any]:
         self.updated_at = datetime.now(timezone.utc).isoformat()
         return {

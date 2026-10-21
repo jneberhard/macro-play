@@ -40,15 +40,15 @@ Use Add to insert a new action after the current selection. Duplicate copies the
 Selecting a mouse action displays a temporary crosshair at its recorded screen position. This preview does not move the pointer or perform a click.""",
     ),
     (
-        "Set several wait times",
-        """The Wait value is the pause before an action begins.
+        "Set wait times and lengths",
+        """Wait is the pause before an action begins. Length is the action's duration, such as the travel time for mouse movement, the hold time for a click, or the duration of an explicit Wait action.
 
 1. Select the first action you want to change.
 2. Hold Ctrl while clicking additional individual actions, or hold Shift to select a range.
-3. Select Set wait.
-4. Enter the wait time in seconds and select OK.
+3. Select Set wait or Set length.
+4. Enter the value in seconds and select OK.
 
-The same wait time is applied to every selected action. All other action settings remain unchanged, and the edited rows stay selected. A value of 0 makes the selected actions begin without an added pre-action pause.""",
+The same value is applied to every selected action. All other action settings remain unchanged, and the edited rows stay selected. A wait value of 0 removes the added pre-action pause. A length of 0 makes supported actions complete immediately.""",
     ),
     (
         "Play a macro",
@@ -60,11 +60,11 @@ Playback sends real mouse and keyboard input. Avoid touching the mouse or typing
     ),
     (
         "Current macro hotkey",
-        """The Current macro hotkey plays the macro that is open in the editor. The default is Ctrl+F9.
+        """The Current macro hotkey plays the macro that is open in the editor. When you open a macro file, that loaded macro immediately becomes this hotkey's target. The default is Ctrl+F9.
 
 Select Change, then physically press the desired combination. Modifier combinations, function keys, and navigation keys are supported. Letters and numbers require Ctrl, Alt, Shift, or Cmd. Select Disable hotkey if you do not want a global shortcut for the open macro.
 
-F8 and Ctrl+F8 cannot be assigned because they are reserved for emergency stop.""",
+F8 and Ctrl+F8 cannot be assigned because they are reserved for emergency stop. Custom hotkeys are cleared and Ctrl+F9 is restored whenever Macro Play starts.""",
     ),
     (
         "Saved macro hotkeys",
@@ -76,7 +76,7 @@ F8 and Ctrl+F8 cannot be assigned because they are reserved for emergency stop."
 4. Press the shortcut you want to assign.
 5. Repeat for each additional macro, then select Save.
 
-Use Change hotkey or Remove to maintain an assignment. Duplicate shortcuts are not allowed. Macro Play must remain running for global hotkeys to work.
+Use Change hotkey or Remove to maintain an assignment. Duplicate shortcuts are not allowed. Macro Play must remain running for global hotkeys to work. Saved-macro assignments are session-only and are cleared the next time Macro Play starts; saved .macro.json files are not deleted.
 
 An assigned macro is read from its saved file each time its hotkey is pressed. It does not replace unsaved work in the editor. It uses the repeat, loop, speed, and window-restore settings currently displayed in Macro Play. If a file was moved or deleted, the manager marks it as missing; remove that assignment and add the file again from its new location.""",
     ),
@@ -86,7 +86,7 @@ An assigned macro is read from its saved file each time its hotkey is pressed. I
 
 Select Open or press Ctrl+O to load a saved macro. New or Ctrl+N clears the editor after giving you an opportunity to save unsaved changes.
 
-Moving a macro file does not damage it, but any saved hotkey assignment still points to the old location and must be reassigned.""",
+Moving a macro file does not damage it. When a file is opened, the current macro hotkey immediately targets it. Saved-macro assignments still point to their original locations for the rest of that session.""",
     ),
     (
         "Keyboard shortcuts",
