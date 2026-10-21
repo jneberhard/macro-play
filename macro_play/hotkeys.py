@@ -5,24 +5,85 @@ import json
 import os
 from pathlib import Path
 import sys
-from typing import Callable
+from typing import Callable, Iterable
 
-
-HOTKEY_OPTIONS: dict[str, str | None] = {
-    "Ctrl + F9": "<ctrl>+<f9>",
-    "Ctrl + F10": "<ctrl>+<f10>",
-    "Ctrl + F11": "<ctrl>+<f11>",
-    "Ctrl + F12": "<ctrl>+<f12>",
-    "Ctrl + Alt + P": "<ctrl>+<alt>+p",
-    "Ctrl + Shift + P": "<ctrl>+<shift>+p",
-    "F9": "<f9>",
-    "F10": "<f10>",
-    "F11": "<f11>",
-    "F12": "<f12>",
-    "Disabled": None,
-}
 
 DEFAULT_PLAY_HOTKEY = "Ctrl + F9"
+MODIFIER_ORDER = ("Ctrl", "Alt", "Shift", "Cmd")
+MODIFIER_BINDINGS = {"Ctrl": "<ctrl>", "Alt": "<alt>", "Shift": "<shift>", "Cmd": "<cmd>"}
+MODIFIER_KEYSYMS = {
+    "Control_L": "Ctrl", "Control_R": "Ctrl",
+    "Alt_L": "Alt", "Alt_R": "Alt", "Option_L": "Alt", "Option_R": "Alt",
+    "Shift_L": "Shift", "Shift_R": "Shift",
+    "Meta_L": "Cmd", "Meta_R": "Cmd", "Super_L": "Cmd", "Super_R": "Cmd",
+    "Win_L": "Cmd", "Win_R": "Cmd", "Command": "Cmd",
+}
+SPECIAL_KEYS = {
+    "space": ("Space", "<space>"),
+    "Return": ("Enter", "<enter>"),
+    "Tab": ("Tab", "<tab>"),
+    "BackSpace": ("Backspace", "<backspace>"),
+    "Delete": ("Delete", "<delete>"),
+    "Insert": ("Insert", "<insert>"),
+    "Home": ("Home", "<home>"),
+    "End": ("End", "<end>"),
+    "Prior": ("Page Up", "<page_up>"),
+    "Next": ("Page Down", "<page_down>"),
+    "Left": ("Left", "<left>"),
+    "Right": ("Right", "<right>"),
+    "Up": ("Up", "<up>"),
+    "Down": ("Down", "<down>"),
+}
+
+
+def hotkey_from_keypress(modifiers: Iterable[str], keysym: str) -> str:
+    """Create a display shortcut from a Tk key event."""
+    modifier_set = set(modifiers)
+    active = [modifier for modifier in MODIFIER_ORDER if modifier in modifier_set]
+    if keysym in MODIFIER_KEYSYMS:
+        raise ValueError("Press a non-modifier key to finish the shortcut.")
+    if keysym.upper().startswith("F") and keysym[1:].isdigit() and 1 <= int(keysym[1:]) <= 24:
+        key = keysym.upper()
+    elif len(keysym) == 1 and keysym.isalnum():
+        if not active:
+            raise ValueError("Add Ctrl, Alt, Shift, or Cmd to letters and numbers.")
+        key = keysym.upper()
+    elif keysym in SPECIAL_KEYS:
+        if not active:
+            raise ValueError("Add a modifier to this key.")
+        key = SPECIAL_KEYS[keysym][0]
+    else:
+        raise ValueError("That key is not supported. Try a letter, number, function key, or navigation key.")
+    result = " + ".join([*active, key])
+    display_to_binding(result)  # Validate reserved and backend-supported combinations.
+    return result
+
+
+def display_to_binding(display: str) -> str | None:
+    if display == "Disabled":
+        return None
+    parts = [part.strip() for part in display.split("+") if part.strip()]
+    if not parts:
+        raise ValueError("Choose a hotkey.")
+    modifiers = [part for part in parts[:-1] if part in MODIFIER_BINDINGS]
+    if len(modifiers) != len(parts) - 1 or len(set(modifiers)) != len(modifiers):
+        raise ValueError("The hotkey contains an invalid modifier.")
+    key = parts[-1]
+    if key.upper().startswith("F") and key[1:].isdigit() and 1 <= int(key[1:]) <= 24:
+        key_binding = f"<{key.lower()}>"
+    elif len(key) == 1 and key.isalnum():
+        if not modifiers:
+            raise ValueError("Letters and numbers require a modifier.")
+        key_binding = key.lower()
+    else:
+        reverse_special = {label: binding for label, binding in SPECIAL_KEYS.values()}
+        if key not in reverse_special or not modifiers:
+            raise ValueError("The hotkey contains an unsupported key.")
+        key_binding = reverse_special[key]
+    canonical = " + ".join([*[m for m in MODIFIER_ORDER if m in modifiers], key.upper() if len(key) == 1 else key])
+    if canonical in {"F8", "Ctrl + F8"}:
+        raise ValueError("F8 and Ctrl + F8 are reserved for emergency stop.")
+    return "+".join([*(MODIFIER_BINDINGS[m] for m in MODIFIER_ORDER if m in modifiers), key_binding])
 
 
 def default_settings_path() -> Path:
@@ -43,7 +104,8 @@ class AppSettings:
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
             hotkey = str(raw.get("play_hotkey", DEFAULT_PLAY_HOTKEY))
-            return cls(play_hotkey=hotkey if hotkey in HOTKEY_OPTIONS else DEFAULT_PLAY_HOTKEY)
+            display_to_binding(hotkey)
+            return cls(play_hotkey=hotkey)
         except (OSError, ValueError, TypeError):
             return cls()
 
@@ -63,9 +125,7 @@ class GlobalPlayHotkey:
 
     def configure(self, selection: str) -> None:
         self.stop()
-        binding = HOTKEY_OPTIONS.get(selection)
-        if selection not in HOTKEY_OPTIONS:
-            raise ValueError(f"Unknown hotkey: {selection}")
+        binding = display_to_binding(selection)
         self.selection = selection
         if binding is None:
             return

@@ -8,7 +8,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Callable
 
 from .models import ACTION_LABELS, Action, Macro
-from .hotkeys import AppSettings, GlobalPlayHotkey, HOTKEY_OPTIONS
+from .hotkeys import AppSettings, GlobalPlayHotkey, MODIFIER_KEYSYMS, MODIFIER_ORDER, hotkey_from_keypress
 from .player import MacroPlayer
 from .recorder import MacroRecorder
 
@@ -130,6 +130,72 @@ class ActionDialog(tk.Toplevel):
             self.destroy()
         except ValueError as exc:
             messagebox.showerror("Check the action", str(exc), parent=self)
+
+
+class HotkeyCaptureDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent)
+        self.title("Choose Play hotkey")
+        self.configure(bg=PANEL)
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        self.result: str | None = None
+        self.modifiers: set[str] = set()
+        self.preview_var = tk.StringVar(value="Press your shortcut…")
+        self.error_var = tk.StringVar(value="")
+
+        body = tk.Frame(self, bg=PANEL, padx=28, pady=24)
+        body.pack(fill="both", expand=True)
+        tk.Label(body, text="Press the Play shortcut", bg=PANEL, fg=TEXT, font=("Segoe UI Semibold", 15)).pack()
+        tk.Label(
+            body,
+            text="Hold any modifiers, then press a letter, number, function, or navigation key.",
+            bg=PANEL, fg=MUTED, wraplength=390, justify="center", font=("Segoe UI", 9),
+        ).pack(pady=(7, 18))
+        tk.Label(
+            body, textvariable=self.preview_var, bg=PANEL_2, fg="white",
+            width=31, padx=16, pady=18, font=("Segoe UI Semibold", 14),
+        ).pack(fill="x")
+        tk.Label(body, textvariable=self.error_var, bg=PANEL, fg=RED, wraplength=390, font=("Segoe UI", 9)).pack(pady=(10, 3))
+        tk.Label(body, text="Esc cancels  •  Ctrl+F8 is reserved for emergency stop", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack()
+        ttk.Button(body, text="Cancel", command=self.destroy).pack(pady=(18, 0))
+
+        self.bind("<KeyPress>", self._key_down)
+        self.bind("<KeyRelease>", self._key_up)
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.update_idletasks()
+        self.geometry(f"+{parent.winfo_rootx()+270}+{parent.winfo_rooty()+150}")
+        self.after(100, self.focus_force)
+        self.wait_window()
+
+    def _key_down(self, event: tk.Event) -> str:
+        keysym = str(event.keysym)
+        modifier = MODIFIER_KEYSYMS.get(keysym)
+        if modifier:
+            self.modifiers.add(modifier)
+            self.preview_var.set(" + ".join(item for item in MODIFIER_ORDER if item in self.modifiers) + " + …")
+            self.error_var.set("")
+            return "break"
+        if keysym == "Escape" and not self.modifiers:
+            self.destroy()
+            return "break"
+        try:
+            self.result = hotkey_from_keypress(self.modifiers, keysym)
+            self.destroy()
+        except ValueError as exc:
+            self.error_var.set(str(exc))
+        return "break"
+
+    def _key_up(self, event: tk.Event) -> str:
+        modifier = MODIFIER_KEYSYMS.get(str(event.keysym))
+        if modifier:
+            self.modifiers.discard(modifier)
+            if self.modifiers:
+                self.preview_var.set(" + ".join(item for item in MODIFIER_ORDER if item in self.modifiers) + " + …")
+            else:
+                self.preview_var.set("Press your shortcut…")
+        return "break"
 
 
 class MacroPlayApp:
@@ -275,15 +341,14 @@ class MacroPlayApp:
         tk.Label(side, text="Re-focuses and resizes recorded windows before their actions run.", wraplength=215, justify="left", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w")
         self._field_label(side, "Play hotkey")
         self.play_hotkey_var = tk.StringVar(value=self.settings.play_hotkey)
-        hotkey_combo = ttk.Combobox(
-            side,
-            textvariable=self.play_hotkey_var,
-            values=tuple(HOTKEY_OPTIONS),
-            state="readonly",
-        )
-        hotkey_combo.pack(fill="x", pady=(4, 4))
-        hotkey_combo.bind("<<ComboboxSelected>>", lambda _e: self._register_play_hotkey(show_error=True))
-        tk.Label(side, text="Starts the current macro from any application.", wraplength=215, justify="left", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w")
+        hotkey_row = tk.Frame(side, bg=PANEL)
+        hotkey_row.pack(fill="x", pady=(4, 4))
+        ttk.Entry(hotkey_row, textvariable=self.play_hotkey_var, state="readonly", width=17).pack(side="left", fill="x", expand=True)
+        ttk.Button(hotkey_row, text="Change", command=self._choose_play_hotkey).pack(side="left", padx=(6, 0))
+        disable_link = tk.Label(side, text="Disable hotkey", bg=PANEL, fg="#a99aff", cursor="hand2", font=("Segoe UI", 8, "underline"))
+        disable_link.pack(anchor="w")
+        disable_link.bind("<Button-1>", lambda _e: self._disable_play_hotkey())
+        tk.Label(side, text="Press the combination you want. It works from any application.", wraplength=215, justify="left", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w", pady=(2, 0))
         ttk.Separator(side).pack(fill="x", pady=20)
         self._field_label(side, "Progress")
         self.progress = ttk.Progressbar(side, mode="determinate", maximum=100)
@@ -318,6 +383,7 @@ class MacroPlayApp:
 
     def _register_play_hotkey(self, *, show_error: bool, persist: bool = True) -> None:
         selection = self.play_hotkey_var.get()
+        previous = self.hotkey_manager.selection
         try:
             self.hotkey_manager.configure(selection)
             self.settings.play_hotkey = selection
@@ -325,10 +391,23 @@ class MacroPlayApp:
                 self.settings.save()
             self.control_hint.configure(text=f"Global Play hotkey: {selection}")
         except (OSError, RuntimeError, ValueError) as exc:
-            self.play_hotkey_var.set("Disabled")
-            self.hotkey_manager.stop()
+            self.play_hotkey_var.set(previous)
+            try:
+                self.hotkey_manager.configure(previous)
+            except (RuntimeError, ValueError):
+                self.hotkey_manager.stop()
             if show_error:
                 messagebox.showerror("Hotkey unavailable", str(exc))
+
+    def _choose_play_hotkey(self) -> None:
+        dialog = HotkeyCaptureDialog(self.root)
+        if dialog.result:
+            self.play_hotkey_var.set(dialog.result)
+            self._register_play_hotkey(show_error=True)
+
+    def _disable_play_hotkey(self) -> None:
+        self.play_hotkey_var.set("Disabled")
+        self._register_play_hotkey(show_error=True)
 
     def _poll_hotkeys(self) -> None:
         try:

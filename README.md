@@ -34,7 +34,7 @@ On macOS, grant **Accessibility** permission to Terminal (for source runs) or Ma
 5. Choose repeat count and playback speed, then press **Play**.
 6. Use **Save** to store the macro as a `.macro.json` file.
 
-Choose a shortcut from **Playback settings → Play hotkey** to start the current macro without returning to Macro Play. The default is **Ctrl+F9**, and the selection is remembered after restarting the app.
+Under **Playback settings → Play hotkey**, click **Change** and physically press the shortcut you want. Macro Play accepts modifier combinations, function keys, and navigation keys. The default is **Ctrl+F9**, and your selection is remembered after restarting the app.
 
 Press **Ctrl+F8** at any time during playback for an emergency stop, even when another application has focus.
 
