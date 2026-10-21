@@ -6,9 +6,10 @@ import queue
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from .models import ACTION_LABELS, Action, Macro
+from .models import ACTION_LABELS, Action, Macro, MacroSlot
 from .hotkeys import (
     AppSettings,
+    DEFAULT_PLAY_HOTKEY,
     GlobalHotkeyRegistry,
     MacroHotkeyBinding,
     MODIFIER_KEYSYMS,
@@ -271,7 +272,7 @@ class HotkeyCaptureDialog(tk.Toplevel):
 
 
 class MacroHotkeyManagerDialog(tk.Toplevel):
-    def __init__(self, parent: tk.Misc, bindings: list[MacroHotkeyBinding], current_hotkey: str) -> None:
+    def __init__(self, parent: tk.Misc, bindings: list[MacroHotkeyBinding], reserved_hotkeys: list[str]) -> None:
         super().__init__(parent)
         self.title("Saved macro hotkeys")
         self.configure(bg=PANEL)
@@ -279,7 +280,7 @@ class MacroHotkeyManagerDialog(tk.Toplevel):
         self.minsize(650, 360)
         self.transient(parent)
         self.grab_set()
-        self.current_hotkey = current_hotkey
+        self.reserved_hotkeys = reserved_hotkeys
         self.bindings = [
             MacroHotkeyBinding(item.hotkey, item.macro_path, item.macro_name, item.id)
             for item in bindings
@@ -344,7 +345,8 @@ class MacroHotkeyManagerDialog(tk.Toplevel):
         dialog = HotkeyCaptureDialog(self)
         if not dialog.result:
             return None
-        assignments = {"current": self.current_hotkey, "candidate": dialog.result}
+        assignments = {"candidate": dialog.result}
+        assignments.update({f"slot:{index}": hotkey for index, hotkey in enumerate(self.reserved_hotkeys, 1)})
         assignments.update({item.id: item.hotkey for item in self.bindings if item.id != excluding})
         try:
             prepare_hotkey_assignments(assignments)
@@ -516,15 +518,20 @@ class MacroPlayApp:
         self.root.geometry("1180x760")
         self.root.minsize(980, 650)
         self.root.configure(bg=BG)
-        self.macro = Macro()
-        self.file_path: Path | None = None
-        self.dirty = False
+        self.settings = reset_settings_for_startup()
+        self.active_macro_number = 1
+        self.macro_page_start = 1
+        self.macro_slots: dict[int, MacroSlot] = {
+            1: MacroSlot(number=1, hotkey=DEFAULT_PLAY_HOTKEY),
+        }
+        self.macro = self.macro_slots[1].macro
+        self.file_path = self.macro_slots[1].file_path
+        self.dirty = self.macro_slots[1].dirty
         self.recorder: MacroRecorder | None = None
         self.player = MacroPlayer()
         self._playback_actions: list[Action] = []
         self._playback_name = ""
         self._highlight_playback = True
-        self.settings = reset_settings_for_startup()
         self._hotkey_events: queue.SimpleQueue[str] = queue.SimpleQueue()
         self.hotkey_manager = GlobalHotkeyRegistry(self._hotkey_events.put)
         self.cursor_preview = CursorTargetPreview(root)
@@ -548,6 +555,10 @@ class MacroPlayApp:
         style.map("Accent.TButton", background=[("active", ACCENT_HOVER), ("disabled", "#42377b")])
         style.configure("Record.TButton", background=RED, foreground="white", borderwidth=0, padding=(16, 9), font=("Segoe UI Semibold", 10))
         style.map("Record.TButton", background=[("active", "#ff7184")])
+        style.configure("Macro.TButton", background="#a52d42", foreground="white", borderwidth=1, padding=(7, 7), font=("Segoe UI Semibold", 9))
+        style.map("Macro.TButton", background=[("active", "#c43a51")])
+        style.configure("SelectedMacro.TButton", background=RED, foreground="white", borderwidth=2, padding=(7, 7), font=("Segoe UI Semibold", 9))
+        style.map("SelectedMacro.TButton", background=[("active", "#ff7184")])
         style.configure("Treeview", background=PANEL, fieldbackground=PANEL, foreground=TEXT, borderwidth=0, rowheight=38)
         style.configure("Treeview.Heading", background=PANEL_2, foreground=MUTED, borderwidth=0, padding=(8, 10), font=("Segoe UI Semibold", 9))
         style.map("Treeview", background=[("selected", "#312a62")], foreground=[("selected", "white")])
@@ -571,6 +582,23 @@ class MacroPlayApp:
         tk.Label(title_box, text="Record once. Repeat effortlessly.", bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(anchor="w")
         self.status_badge = tk.Label(header, text="●  READY", bg="#152a27", fg=GREEN, padx=12, pady=6, font=("Segoe UI Semibold", 9))
         self.status_badge.pack(side="right")
+
+        selector = tk.Frame(self.root, bg=PANEL, padx=16, pady=8, highlightbackground=BORDER, highlightthickness=1)
+        selector.pack(fill="x", padx=28, pady=(0, 10))
+        self.macro_page_label = tk.Label(selector, text="", bg=PANEL, fg=MUTED, width=9, font=("Segoe UI Semibold", 8))
+        self.macro_page_label.pack(side="left", padx=(0, 6))
+        self.macro_left_btn = ttk.Button(selector, text="‹", width=3, command=lambda: self._scroll_macro_slots(-1))
+        self.macro_left_btn.pack(side="left", padx=(0, 6))
+        macro_buttons = tk.Frame(selector, bg=PANEL)
+        macro_buttons.pack(side="left", fill="x", expand=True)
+        self.macro_slot_buttons: list[ttk.Button] = []
+        for offset in range(10):
+            button = ttk.Button(macro_buttons, text="", style="Macro.TButton")
+            button.pack(side="left", fill="x", expand=True, padx=2)
+            self.macro_slot_buttons.append(button)
+        self.macro_right_btn = ttk.Button(selector, text="›", width=3, command=lambda: self._scroll_macro_slots(1))
+        self.macro_right_btn.pack(side="left", padx=(6, 0))
+        self._render_macro_selector()
 
         controls = tk.Frame(self.root, bg=PANEL, padx=24, pady=16, highlightbackground=BORDER, highlightthickness=1)
         controls.pack(fill="x", padx=28, pady=(0, 16))
@@ -664,7 +692,7 @@ class MacroPlayApp:
         self.restore_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(side, text="Restore window positions", variable=self.restore_var).pack(anchor="w", pady=(4, 8))
         tk.Label(side, text="Re-focuses and resizes recorded windows before their actions run.", wraplength=215, justify="left", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w")
-        self._field_label(side, "Current macro hotkey")
+        self._field_label(side, "Selected slot hotkey")
         self.play_hotkey_var = tk.StringVar(value=self.settings.play_hotkey)
         hotkey_row = tk.Frame(side, bg=PANEL)
         hotkey_row.pack(fill="x", pady=(4, 4))
@@ -694,6 +722,59 @@ class MacroPlayApp:
     def _field_label(parent: tk.Misc, text: str) -> None:
         tk.Label(parent, text=text.upper(), bg=PANEL, fg=MUTED, font=("Segoe UI Semibold", 8)).pack(anchor="w")
 
+    def _slot(self, number: int) -> MacroSlot:
+        if number not in self.macro_slots:
+            self.macro_slots[number] = MacroSlot(number=number)
+        return self.macro_slots[number]
+
+    def _store_active_slot(self) -> None:
+        slot = self._slot(self.active_macro_number)
+        slot.macro = self.macro
+        slot.file_path = self.file_path
+        slot.dirty = self.dirty
+        if hasattr(self, "play_hotkey_var"):
+            slot.hotkey = self.play_hotkey_var.get()
+
+    def _render_macro_selector(self) -> None:
+        if not hasattr(self, "macro_slot_buttons"):
+            return
+        end = self.macro_page_start + 9
+        self.macro_page_label.configure(text=f"{self.macro_page_start}–{end}")
+        self.macro_left_btn.configure(state="disabled" if self.macro_page_start == 1 else "normal")
+        for offset, button in enumerate(self.macro_slot_buttons):
+            number = self.macro_page_start + offset
+            slot = self._slot(number)
+            marker = "*" if slot.dirty else ""
+            button.configure(
+                text=f"{marker}Macro {number}",
+                command=lambda selected=number: self._switch_macro_slot(selected),
+                style="SelectedMacro.TButton" if number == self.active_macro_number else "Macro.TButton",
+            )
+
+    def _scroll_macro_slots(self, direction: int) -> None:
+        self.macro_page_start = max(1, self.macro_page_start + (10 * direction))
+        self._render_macro_selector()
+
+    def _switch_macro_slot(self, number: int, *, force: bool = False) -> None:
+        if number == self.active_macro_number:
+            return
+        if not force and (self.player.running or (self.recorder and self.recorder.running)):
+            messagebox.showinfo("Macro is busy", "Stop recording or playback before switching macros.", parent=self.root)
+            return
+        self._store_active_slot()
+        self.active_macro_number = number
+        slot = self._slot(number)
+        self.macro = slot.macro
+        self.file_path = slot.file_path
+        self.dirty = slot.dirty
+        self.name_var.set(self.macro.name)
+        self.play_hotkey_var.set(slot.hotkey)
+        self.cursor_preview.hide()
+        self._set_dirty(slot.dirty)
+        self._refresh()
+        self._render_macro_selector()
+        self.control_hint.configure(text=f"Macro {number} selected — record, open, or edit this slot")
+
     def _bind_shortcuts(self) -> None:
         self.root.bind("<Control-s>", lambda _e: self._save())
         self.root.bind("<Control-o>", lambda _e: self._open())
@@ -719,24 +800,29 @@ class MacroPlayApp:
         self.speed_label.configure(text=f"{self.speed_var.get():.1f}×")
 
     def _hotkey_assignments(self) -> dict[str, str]:
-        return {
-            "current": self.play_hotkey_var.get(),
-            **{item.id: item.hotkey for item in self.settings.macro_hotkeys},
-        }
+        assignments = {f"slot:{number}": slot.hotkey for number, slot in self.macro_slots.items()}
+        assignments[f"slot:{self.active_macro_number}"] = self.play_hotkey_var.get()
+        assignments.update({item.id: item.hotkey for item in self.settings.macro_hotkeys})
+        return assignments
 
     def _configure_hotkeys(self, *, show_error: bool, persist: bool = True) -> bool:
         previous_assignments = dict(self.hotkey_manager.assignments)
-        previous_play_hotkey = self.settings.play_hotkey
+        slot = self._slot(self.active_macro_number)
+        previous_play_hotkey = slot.hotkey
         try:
             self.hotkey_manager.configure(self._hotkey_assignments())
-            self.settings.play_hotkey = self.play_hotkey_var.get()
+            slot.hotkey = self.play_hotkey_var.get()
+            self.settings.play_hotkey = slot.hotkey
             if persist:
                 self.settings.save()
-            count = len(self.settings.macro_hotkeys)
-            self.control_hint.configure(text=f"{count + (self.settings.play_hotkey != 'Disabled')} global macro hotkey(s) active")
+            slot_count = sum(item.hotkey != "Disabled" for item in self.macro_slots.values())
+            count = slot_count + len(self.settings.macro_hotkeys)
+            self.control_hint.configure(text=f"{count} global macro hotkey(s) active this session")
             self._update_macro_hotkeys_label()
+            self._render_macro_selector()
             return True
         except (OSError, RuntimeError, ValueError) as exc:
+            slot.hotkey = previous_play_hotkey
             self.settings.play_hotkey = previous_play_hotkey
             self.play_hotkey_var.set(previous_play_hotkey)
             try:
@@ -744,7 +830,8 @@ class MacroPlayApp:
             except (RuntimeError, ValueError):
                 self.hotkey_manager.stop()
             if show_error:
-                messagebox.showerror("Hotkey unavailable", str(exc), parent=self.root)
+                title = "Hotkey already in use" if "already in use for this session" in str(exc) else "Hotkey unavailable"
+                messagebox.showerror(title, str(exc), parent=self.root)
             return False
 
     def _choose_play_hotkey(self) -> None:
@@ -764,7 +851,8 @@ class MacroPlayApp:
 
     def _manage_macro_hotkeys(self) -> None:
         old_bindings = self.settings.macro_hotkeys
-        dialog = MacroHotkeyManagerDialog(self.root, old_bindings, self.play_hotkey_var.get())
+        assigned_slot_hotkeys = [slot.hotkey for slot in self.macro_slots.values() if slot.hotkey != "Disabled"]
+        dialog = MacroHotkeyManagerDialog(self.root, old_bindings, assigned_slot_hotkeys)
         if dialog.result is None:
             return
         self.settings.macro_hotkeys = dialog.result
@@ -778,8 +866,18 @@ class MacroPlayApp:
                 token = self._hotkey_events.get_nowait()
                 if self.player.running or (self.recorder and self.recorder.running):
                     continue
-                if token == "current":
-                    self._play()
+                if token.startswith("slot:"):
+                    try:
+                        number = int(token.split(":", 1)[1])
+                    except ValueError:
+                        continue
+                    slot = self.macro_slots.get(number)
+                    if slot and slot.macro.actions:
+                        self._start_playback(
+                            slot.macro.actions,
+                            f"Macro {number}: {slot.macro.name}",
+                            highlight=number == self.active_macro_number,
+                        )
                 else:
                     binding = next((item for item in self.settings.macro_hotkeys if item.id == token), None)
                     if binding:
@@ -790,8 +888,13 @@ class MacroPlayApp:
 
     def _set_dirty(self, dirty: bool) -> None:
         self.dirty = dirty
+        slot = self._slot(self.active_macro_number)
+        slot.macro = self.macro
+        slot.file_path = self.file_path
+        slot.dirty = dirty
         name = self.file_path.name if self.file_path else self.macro.name
-        self.root.title(f"{'*' if dirty else ''}{name} — Macro Play")
+        self.root.title(f"{'*' if dirty else ''}Macro {self.active_macro_number}: {name} — Macro Play")
+        self._render_macro_selector()
 
     def _refresh(self, select: str | list[str] | tuple[str, ...] | None = None) -> None:
         if select is None:
@@ -1060,6 +1163,27 @@ class MacroPlayApp:
             return self._save()
         return True
 
+    def _maybe_save_all_slots(self) -> bool:
+        self._store_active_slot()
+        dirty_numbers = sorted(number for number, slot in self.macro_slots.items() if slot.dirty)
+        if not dirty_numbers:
+            return True
+        count = len(dirty_numbers)
+        answer = messagebox.askyesnocancel(
+            "Unsaved macros",
+            f"{count} macro slot{'s have' if count != 1 else ' has'} unsaved changes. Save before exiting?",
+            parent=self.root,
+        )
+        if answer is None:
+            return False
+        if not answer:
+            return True
+        for number in dirty_numbers:
+            self._switch_macro_slot(number, force=True)
+            if not self._save():
+                return False
+        return True
+
     def _new(self) -> None:
         if not self._maybe_discard():
             return
@@ -1081,7 +1205,7 @@ class MacroPlayApp:
             self.name_var.set(self.macro.name)
             self._set_dirty(False)
             self._refresh()
-            self.control_hint.configure(text=f"Loaded {self.file_path.name} — the current macro hotkey will play this file")
+            self.control_hint.configure(text=f"Loaded {self.file_path.name} — Macro {self.active_macro_number}'s hotkey will play this file")
         except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
             messagebox.showerror("Could not open macro", str(exc))
 
@@ -1112,7 +1236,7 @@ class MacroPlayApp:
             self.recorder.stop()
         if self.player.running:
             self.player.stop()
-        if self._maybe_discard():
+        if self._maybe_save_all_slots():
             self.cursor_preview.hide()
             self.hotkey_manager.stop()
             if self._hotkey_after:

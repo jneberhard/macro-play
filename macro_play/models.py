@@ -161,3 +161,12 @@ class Macro:
     def load(cls, path: str | Path) -> "Macro":
         return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
 
+
+@dataclass(slots=True)
+class MacroSlot:
+    number: int
+    macro: Macro = field(default_factory=Macro)
+    file_path: Path | None = None
+    dirty: bool = False
+    hotkey: str = "Disabled"
+

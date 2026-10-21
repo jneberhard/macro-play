@@ -174,7 +174,7 @@ def prepare_hotkey_assignments(assignments: dict[str, str]) -> dict[str, str]:
         if binding is None:
             continue
         if binding in prepared:
-            raise ValueError(f"{display} is already assigned to another macro.")
+            raise ValueError(f"{display} is already in use for this session. Choose a different hotkey.")
         prepared[binding] = token
     return prepared
 

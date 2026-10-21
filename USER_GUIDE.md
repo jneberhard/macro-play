@@ -17,6 +17,14 @@ The top controls start recording and playback and provide **New**, **Open**, **S
 
 Playback settings control the macro name, repeat count, continuous looping, playback speed, window restoration, and global hotkeys. The progress area shows the macro currently playing.
 
+## Numbered macro selector
+
+The red buttons across the top are independent macro slots. Ten are visible at once. Use the left and right arrows to move through **Macro 1–10**, **Macro 11–20**, and higher ranges.
+
+Select a slot before recording or opening a macro. Every slot keeps its own timeline, loaded file, unsaved status, and hotkey during the current session. Switching slots does not erase unsaved work, and an asterisk identifies an unsaved slot.
+
+To build several macros, select **Macro 1**, create or open it, and assign its hotkey. Select **Macro 2** and repeat. A slot hotkey plays that macro even when another slot is currently visible. Slots are cleared at startup, so save macros to `.macro.json` files for future sessions.
+
 ## Recording
 
 Select **Record**, then perform the workflow normally. Macro Play captures global mouse movement, clicks, dragging, scrolling, and keyboard input. Ordinary typing becomes readable **Type text** actions, and mouse movement is consolidated to avoid a timeline full of coordinate samples.
@@ -56,7 +64,7 @@ Playback sends real mouse and keyboard input. Avoid touching the mouse or typing
 
 ### Current macro
 
-The current macro hotkey plays the macro open in the editor. Opening a macro file immediately makes that loaded macro the shortcut's target. Select **Change**, then physically press the desired combination. Letters and numbers require Ctrl, Alt, Shift, or Cmd. Select **Disable hotkey** to turn it off. F8 and Ctrl+F8 are reserved for emergency stop. Custom hotkeys are cleared and Ctrl+F9 is restored whenever Macro Play starts.
+The current macro hotkey belongs to the selected numbered slot. Opening a macro file into that slot immediately makes the loaded macro its shortcut target. Select **Change**, then physically press the desired combination. Letters and numbers require Ctrl, Alt, Shift, or Cmd. Select **Disable hotkey** to turn it off. F8 and Ctrl+F8 are reserved for emergency stop. If a shortcut is already used in the session, Macro Play displays a warning and preserves the existing assignment. Custom hotkeys are cleared and Macro 1's Ctrl+F9 is restored whenever Macro Play starts.
 
 ### Several saved macros
 

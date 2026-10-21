@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from macro_play.models import Action, Macro
+from macro_play.models import Action, Macro, MacroSlot
 
 
 class MacroModelTests(unittest.TestCase):
@@ -73,6 +73,16 @@ class MacroModelTests(unittest.TestCase):
         macro = Macro(actions=[Action("wait")])
         with self.assertRaisesRegex(ValueError, "non-negative"):
             macro.set_length({macro.actions[0].id}, float("inf"))
+
+    def test_macro_slots_have_independent_timelines(self):
+        first = MacroSlot(1)
+        second = MacroSlot(2)
+        first.macro.actions.append(Action("text", data={"text": "first"}))
+        first.hotkey = "Ctrl + Alt + A"
+
+        self.assertEqual(len(first.macro.actions), 1)
+        self.assertEqual(second.macro.actions, [])
+        self.assertEqual(second.hotkey, "Disabled")
 
 
 if __name__ == "__main__":

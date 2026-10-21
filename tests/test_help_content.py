@@ -13,6 +13,7 @@ class HelpContentTests(unittest.TestCase):
         manual = "\n".join(f"{title}\n{body}" for title, body in HELP_SECTIONS)
         for required in (
             "Record a macro",
+            "Numbered macro selector",
             "Edit actions",
             "Set wait times and lengths",
             "Saved macro hotkeys",

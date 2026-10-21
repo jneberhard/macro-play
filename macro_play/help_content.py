@@ -24,6 +24,16 @@ The Action timeline lists every recorded step. The Wait column is the pause befo
 Playback settings control the macro name, repeat count, continuous looping, playback speed, window restoration, and global hotkeys. The progress area shows the macro currently playing.""",
     ),
     (
+        "Numbered macro selector",
+        """The red buttons across the top are independent macro slots. Ten buttons are visible at a time. Use the left and right arrow buttons to move between Macro 1–10, Macro 11–20, and higher ranges.
+
+Select a slot before recording or opening a file. Each slot keeps its own action timeline, loaded file, unsaved state, and hotkey for the current session. Switching slots does not erase unsaved work. An asterisk on a button means that slot has unsaved changes.
+
+To build several macros, select Macro 1, record or open its actions, and assign its hotkey. Then select Macro 2 and repeat. A slot hotkey plays that slot directly even while a different slot is visible.
+
+Macro slots are cleared when the application starts. Save each macro to a .macro.json file if you want to use it in a later session.""",
+    ),
+    (
         "Record a macro",
         """Select Record, then perform the workflow normally. Macro Play captures global mouse movement, clicks, dragging, scrolling, and keyboard input. Ordinary typing is consolidated into readable Type text actions. Mouse movement between interactions is consolidated so the timeline is not flooded with coordinate samples.
 
@@ -59,12 +69,12 @@ Select Play to begin. Pause temporarily stops progress; Resume continues. Select
 Playback sends real mouse and keyboard input. Avoid touching the mouse or typing unless the macro is paused or stopped.""",
     ),
     (
-        "Current macro hotkey",
-        """The Current macro hotkey plays the macro that is open in the editor. When you open a macro file, that loaded macro immediately becomes this hotkey's target. The default is Ctrl+F9.
+        "Selected slot hotkey",
+        """The Current macro hotkey belongs to the selected numbered slot. When you open a macro file into that slot, the loaded macro immediately becomes its hotkey target. Macro 1 defaults to Ctrl+F9.
 
 Select Change, then physically press the desired combination. Modifier combinations, function keys, and navigation keys are supported. Letters and numbers require Ctrl, Alt, Shift, or Cmd. Select Disable hotkey if you do not want a global shortcut for the open macro.
 
-F8 and Ctrl+F8 cannot be assigned because they are reserved for emergency stop. Custom hotkeys are cleared and Ctrl+F9 is restored whenever Macro Play starts.""",
+F8 and Ctrl+F8 cannot be assigned because they are reserved for emergency stop. If a shortcut is already used by another slot or saved-macro assignment, a warning explains that it is already in use for the session. Custom hotkeys are cleared and Macro 1's Ctrl+F9 is restored whenever Macro Play starts.""",
     ),
     (
         "Saved macro hotkeys",

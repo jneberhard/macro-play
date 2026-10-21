@@ -56,7 +56,7 @@ class HotkeySettingsTests(unittest.TestCase):
         ])
 
     def test_duplicate_assignments_are_rejected(self):
-        with self.assertRaisesRegex(ValueError, "already assigned"):
+        with self.assertRaisesRegex(ValueError, "already in use for this session"):
             prepare_hotkey_assignments({"current": "Ctrl + Alt + A", "saved": "Ctrl + Alt + A"})
 
     def test_disabled_assignment_is_ignored(self):
