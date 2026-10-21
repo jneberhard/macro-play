@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "macro-play"
+version = "0.1.0"
+description = "A no-code mouse and keyboard recorder for Windows and macOS"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["pynput>=1.7.7,<2"]
+
+[project.gui-scripts]
+macro-play = "macro_play.ui:run"
+
+[tool.setuptools.packages.find]
+include = ["macro_play*"]
+
