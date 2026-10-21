@@ -12,6 +12,7 @@ Macro Play is a no-code desktop recorder for repetitive computer work. It captur
 - Supports adjustable playback speed, pause/resume, up to 999 repeats, or looping until stopped.
 - Provides a selectable global Play hotkey that works while another application has focus.
 - Rejects invalid system-uptime values in recorded waits and repairs affected saved macros on load.
+- Shows a temporary crosshair at the recorded cursor coordinates when a mouse action is selected.
 - Saves portable, human-readable `.macro.json` files for later recall.
 - Runs on Windows and macOS. Linux input works where the desktop session permits global hooks.
 

@@ -25,6 +25,69 @@ RED = "#ff5c72"
 GREEN = "#37d49b"
 
 
+class CursorTargetPreview:
+    """Shows a temporary, non-interactive target at an action's screen position."""
+
+    SIZE = 58
+
+    def __init__(self, root: tk.Tk) -> None:
+        self.root = root
+        self.window: tk.Toplevel | None = None
+        self.dismiss_after: str | None = None
+
+    def show(self, x: int, y: int) -> None:
+        self.hide()
+        transparent = "#010203"
+        window = tk.Toplevel(self.root)
+        self.window = window
+        window.overrideredirect(True)
+        window.configure(bg=transparent)
+        window.attributes("-topmost", True)
+        try:
+            window.attributes("-transparentcolor", transparent)
+        except tk.TclError:
+            window.attributes("-alpha", 0.9)
+        try:
+            window.attributes("-disabled", True)
+        except tk.TclError:
+            pass
+        window.focusmodel("passive")
+
+        canvas = tk.Canvas(
+            window, width=self.SIZE, height=self.SIZE, bg=transparent,
+            highlightthickness=0, bd=0,
+        )
+        canvas.pack()
+        center = self.SIZE // 2
+        canvas.create_oval(8, 8, self.SIZE - 8, self.SIZE - 8, outline="white", width=5)
+        canvas.create_oval(9, 9, self.SIZE - 9, self.SIZE - 9, outline=ACCENT, width=3)
+        canvas.create_line(center, 0, center, 18, fill="white", width=3)
+        canvas.create_line(center, self.SIZE - 18, center, self.SIZE, fill="white", width=3)
+        canvas.create_line(0, center, 18, center, fill="white", width=3)
+        canvas.create_line(self.SIZE - 18, center, self.SIZE, center, fill="white", width=3)
+        canvas.create_oval(center - 3, center - 3, center + 3, center + 3, fill=RED, outline="white")
+
+        left = int(x) - center
+        top = int(y) - center
+        window.geometry(f"{self.SIZE}x{self.SIZE}{left:+d}{top:+d}")
+        window.lift()
+        self.dismiss_after = self.root.after(1800, self.hide)
+
+    def hide(self) -> None:
+        if self.dismiss_after:
+            try:
+                self.root.after_cancel(self.dismiss_after)
+            except tk.TclError:
+                pass
+            self.dismiss_after = None
+        if self.window:
+            try:
+                self.window.destroy()
+            except tk.TclError:
+                pass
+            self.window = None
+
+
 class ActionDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, action: Action | None = None) -> None:
         super().__init__(parent)
@@ -213,6 +276,7 @@ class MacroPlayApp:
         self.settings = AppSettings.load()
         self._hotkey_events: queue.SimpleQueue[str] = queue.SimpleQueue()
         self.hotkey_manager = GlobalPlayHotkey(lambda: self._hotkey_events.put("play"))
+        self.cursor_preview = CursorTargetPreview(root)
         self._hotkey_after: str | None = None
         self._configure_styles()
         self._build_ui()
@@ -315,6 +379,7 @@ class MacroPlayApp:
         self.tree.tag_configure("active", background="#27214f")
         self.tree.bind("<Double-1>", lambda _e: self._edit())
         self.tree.bind("<Delete>", lambda _e: self._delete())
+        self.tree.bind("<<TreeviewSelect>>", self._preview_selected_action)
 
         side = tk.Frame(content, bg=PANEL, width=260, padx=20, pady=18, highlightbackground=BORDER, highlightthickness=1)
         side.grid(row=0, column=1, sticky="ns")
@@ -529,6 +594,21 @@ class MacroPlayApp:
         ids = set(self.tree.selection())
         return [i for i, action in enumerate(self.macro.actions) if action.id in ids]
 
+    def _preview_selected_action(self, _event: tk.Event | None = None) -> None:
+        selected = self._selected_indices()
+        if not selected:
+            self.cursor_preview.hide()
+            return
+        action = self.macro.actions[selected[0]]
+        position = action.cursor_position()
+        if position is None:
+            self.cursor_preview.hide()
+            self.footer_label.configure(text=f"{action.label} has no cursor position to preview.")
+            return
+        x, y = position
+        self.cursor_preview.show(x, y)
+        self.footer_label.configure(text=f"Cursor target preview: ({x}, {y})  •  No click was performed.")
+
     def _add(self) -> None:
         dialog = ActionDialog(self.root)
         if dialog.result:
@@ -651,6 +731,7 @@ class MacroPlayApp:
         if self.player.running:
             self.player.stop()
         if self._maybe_discard():
+            self.cursor_preview.hide()
             self.hotkey_manager.stop()
             if self._hotkey_after:
                 self.root.after_cancel(self._hotkey_after)

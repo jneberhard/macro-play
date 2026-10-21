@@ -35,6 +35,13 @@ class MacroModelTests(unittest.TestCase):
         action = Action.from_dict({"kind": "mouse_click", "delay": 636652.77, "data": {}})
         self.assertEqual(action.delay, 0.0)
 
+    def test_mouse_action_exposes_cursor_position(self):
+        action = Action("mouse_click", data={"x": "420", "y": 315, "button": "left"})
+        self.assertEqual(action.cursor_position(), (420, 315))
+
+    def test_keyboard_action_has_no_cursor_position(self):
+        self.assertIsNone(Action("text", data={"text": "hello"}).cursor_position())
+
 
 if __name__ == "__main__":
     unittest.main()

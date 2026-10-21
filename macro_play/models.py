@@ -69,6 +69,14 @@ class Action:
             return f"{self.duration:.2f} seconds"
         return ""
 
+    def cursor_position(self) -> tuple[int, int] | None:
+        if self.kind not in {"mouse_move", "mouse_click", "mouse_down", "mouse_up", "mouse_scroll"}:
+            return None
+        try:
+            return int(self.data["x"]), int(self.data["y"])
+        except (KeyError, TypeError, ValueError):
+            return None
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
