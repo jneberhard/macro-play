@@ -104,6 +104,18 @@ class Macro:
     def estimated_duration(self) -> float:
         return sum(a.delay + a.duration for a in self.actions if a.enabled)
 
+    def set_wait_time(self, action_ids: set[str], seconds: float) -> int:
+        """Set the pre-action wait for every action whose ID is selected."""
+        cleaned = _clean_delay(seconds)
+        if cleaned != float(seconds):
+            raise ValueError("Wait time must be between 0 and 86,399 seconds.")
+        changed = 0
+        for action in self.actions:
+            if action.id in action_ids:
+                action.delay = cleaned
+                changed += 1
+        return changed
+
     def to_dict(self) -> dict[str, Any]:
         self.updated_at = datetime.now(timezone.utc).isoformat()
         return {

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import queue
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .models import ACTION_LABELS, Action, Macro
 from .hotkeys import (
@@ -491,7 +491,8 @@ class MacroPlayApp:
         tools = tk.Frame(editor, bg=PANEL_2, padx=10, pady=8)
         tools.grid(row=1, column=0, sticky="ew")
         for text, command in [
-            ("＋ Add", self._add), ("Edit", self._edit), ("Duplicate", self._duplicate),
+            ("＋ Add", self._add), ("Edit", self._edit), ("Set wait…", self._set_wait_for_selected),
+            ("Duplicate", self._duplicate),
             ("↑", lambda: self._move(-1)), ("↓", lambda: self._move(1)), ("Delete", self._delete),
         ]:
             ttk.Button(tools, text=text, command=command).pack(side="left", padx=3)
@@ -662,8 +663,13 @@ class MacroPlayApp:
         name = self.file_path.name if self.file_path else self.macro.name
         self.root.title(f"{'*' if dirty else ''}{name} — Macro Play")
 
-    def _refresh(self, select: str | None = None) -> None:
-        current = select or (self.tree.selection()[0] if hasattr(self, "tree") and self.tree.selection() else None)
+    def _refresh(self, select: str | list[str] | tuple[str, ...] | None = None) -> None:
+        if select is None:
+            selected_ids = list(self.tree.selection()) if hasattr(self, "tree") else []
+        elif isinstance(select, str):
+            selected_ids = [select]
+        else:
+            selected_ids = list(select)
         for item in self.tree.get_children():
             self.tree.delete(item)
         for index, action in enumerate(self.macro.actions, 1):
@@ -672,9 +678,10 @@ class MacroPlayApp:
                 values=(index, action.label, action.details(), f"{action.delay:.2f}s", f"{action.duration:.2f}s" if action.duration else "—"),
                 tags=(() if action.enabled else ("disabled",)),
             )
-        if current and self.tree.exists(current):
-            self.tree.selection_set(current)
-            self.tree.see(current)
+        selected_ids = [item_id for item_id in selected_ids if self.tree.exists(item_id)]
+        if selected_ids:
+            self.tree.selection_set(*selected_ids)
+            self.tree.see(selected_ids[0])
         count = len(self.macro.actions)
         self.summary_label.configure(text=f"{count} action{'s' if count != 1 else ''}  •  {self.macro.estimated_duration:.1f}s")
         self.play_btn.configure(state="normal" if count and not self.player.running else "disabled")
@@ -828,6 +835,39 @@ class MacroPlayApp:
             self.macro.actions[index] = dialog.result
             self._set_dirty(True)
             self._refresh(dialog.result.id)
+
+    def _set_wait_for_selected(self) -> None:
+        selected_ids = list(self.tree.selection())
+        if not selected_ids:
+            messagebox.showinfo(
+                "Select actions",
+                "Select one or more actions first. Use Ctrl-click or Shift-click to select several rows.",
+                parent=self.root,
+            )
+            return
+        selected_id_set = set(selected_ids)
+        selected_actions = [action for action in self.macro.actions if action.id in selected_id_set]
+        waits = {action.delay for action in selected_actions}
+        initial = next(iter(waits)) if len(waits) == 1 else 0.0
+        seconds = simpledialog.askfloat(
+            "Set wait time",
+            f"Wait before each of the {len(selected_ids)} selected action{'s' if len(selected_ids) != 1 else ''} (seconds):",
+            parent=self.root,
+            initialvalue=initial,
+            minvalue=0.0,
+            maxvalue=86_399.0,
+        )
+        if seconds is None:
+            return
+        try:
+            changed = self.macro.set_wait_time(selected_id_set, seconds)
+        except ValueError as exc:
+            messagebox.showerror("Invalid wait time", str(exc), parent=self.root)
+            return
+        if changed:
+            self._set_dirty(True)
+            self._refresh(selected_ids)
+            self.control_hint.configure(text=f"Set wait time to {seconds:.2f}s on {changed} action{'s' if changed != 1 else ''}")
 
     def _duplicate(self) -> None:
         selected = self._selected_indices()

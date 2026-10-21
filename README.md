@@ -9,6 +9,7 @@ Macro Play is a no-code desktop recorder for repetitive computer work. It captur
 - Consolidates hundreds of raw mouse coordinates into one editable move between interactions.
 - Tracks the active window's title, position, and size and restores it during playback.
 - Lets you add, edit, duplicate, reorder, disable, or delete actions without writing code.
+- Bulk-edits the wait time for any group of selected timeline actions.
 - Supports adjustable playback speed, pause/resume, up to 999 repeats, or looping until stopped.
 - Provides a selectable global Play hotkey that works while another application has focus.
 - Assigns separate global hotkeys to any number of saved macros, so the right workflow plays instantly.
@@ -36,6 +37,8 @@ On macOS, grant **Accessibility** permission to Terminal (for source runs) or Ma
 4. Double-click timeline actions to review or edit them.
 5. Choose repeat count and playback speed, then press **Play**.
 6. Use **Save** to store the macro as a `.macro.json` file.
+
+To give several actions the same wait time, select their rows with **Ctrl-click** or **Shift-click**, choose **Set wait**, enter the time once, and press **OK**. Every selected action is updated together.
 
 Under **Playback settings → Play hotkey**, click **Change** and physically press the shortcut you want. Macro Play accepts modifier combinations, function keys, and navigation keys. The default is **Ctrl+F9**, and your selection is remembered after restarting the app.
 

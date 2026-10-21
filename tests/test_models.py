@@ -42,6 +42,22 @@ class MacroModelTests(unittest.TestCase):
     def test_keyboard_action_has_no_cursor_position(self):
         self.assertIsNone(Action("text", data={"text": "hello"}).cursor_position())
 
+    def test_set_wait_time_updates_only_selected_actions(self):
+        first = Action("mouse_click", delay=0.1)
+        second = Action("text", delay=0.2)
+        third = Action("wait", delay=0.3)
+        macro = Macro(actions=[first, second, third])
+
+        changed = macro.set_wait_time({first.id, third.id}, 1.25)
+
+        self.assertEqual(changed, 2)
+        self.assertEqual([action.delay for action in macro.actions], [1.25, 0.2, 1.25])
+
+    def test_set_wait_time_rejects_invalid_value(self):
+        macro = Macro(actions=[Action("wait")])
+        with self.assertRaisesRegex(ValueError, "between 0"):
+            macro.set_wait_time({macro.actions[0].id}, -1)
+
 
 if __name__ == "__main__":
     unittest.main()
