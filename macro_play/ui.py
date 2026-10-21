@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import queue
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Callable
 
 from .models import ACTION_LABELS, Action, Macro
+from .hotkeys import AppSettings, GlobalPlayHotkey, HOTKEY_OPTIONS
 from .player import MacroPlayer
 from .recorder import MacroRecorder
 
@@ -142,9 +144,15 @@ class MacroPlayApp:
         self.dirty = False
         self.recorder: MacroRecorder | None = None
         self.player = MacroPlayer()
+        self.settings = AppSettings.load()
+        self._hotkey_events: queue.SimpleQueue[str] = queue.SimpleQueue()
+        self.hotkey_manager = GlobalPlayHotkey(lambda: self._hotkey_events.put("play"))
+        self._hotkey_after: str | None = None
         self._configure_styles()
         self._build_ui()
         self._bind_shortcuts()
+        self._register_play_hotkey(show_error=False, persist=False)
+        self._hotkey_after = self.root.after(75, self._poll_hotkeys)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self._refresh()
 
@@ -265,6 +273,17 @@ class MacroPlayApp:
         self.restore_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(side, text="Restore window positions", variable=self.restore_var).pack(anchor="w", pady=(4, 8))
         tk.Label(side, text="Re-focuses and resizes recorded windows before their actions run.", wraplength=215, justify="left", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w")
+        self._field_label(side, "Play hotkey")
+        self.play_hotkey_var = tk.StringVar(value=self.settings.play_hotkey)
+        hotkey_combo = ttk.Combobox(
+            side,
+            textvariable=self.play_hotkey_var,
+            values=tuple(HOTKEY_OPTIONS),
+            state="readonly",
+        )
+        hotkey_combo.pack(fill="x", pady=(4, 4))
+        hotkey_combo.bind("<<ComboboxSelected>>", lambda _e: self._register_play_hotkey(show_error=True))
+        tk.Label(side, text="Starts the current macro from any application.", wraplength=215, justify="left", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w")
         ttk.Separator(side).pack(fill="x", pady=20)
         self._field_label(side, "Progress")
         self.progress = ttk.Progressbar(side, mode="determinate", maximum=100)
@@ -296,6 +315,30 @@ class MacroPlayApp:
 
     def _update_speed(self) -> None:
         self.speed_label.configure(text=f"{self.speed_var.get():.1f}×")
+
+    def _register_play_hotkey(self, *, show_error: bool, persist: bool = True) -> None:
+        selection = self.play_hotkey_var.get()
+        try:
+            self.hotkey_manager.configure(selection)
+            self.settings.play_hotkey = selection
+            if persist:
+                self.settings.save()
+            self.control_hint.configure(text=f"Global Play hotkey: {selection}")
+        except (OSError, RuntimeError, ValueError) as exc:
+            self.play_hotkey_var.set("Disabled")
+            self.hotkey_manager.stop()
+            if show_error:
+                messagebox.showerror("Hotkey unavailable", str(exc))
+
+    def _poll_hotkeys(self) -> None:
+        try:
+            while True:
+                event = self._hotkey_events.get_nowait()
+                if event == "play" and not self.player.running and not (self.recorder and self.recorder.running):
+                    self._play()
+        except queue.Empty:
+            pass
+        self._hotkey_after = self.root.after(75, self._poll_hotkeys)
 
     def _set_dirty(self, dirty: bool) -> None:
         self.dirty = dirty
@@ -529,6 +572,9 @@ class MacroPlayApp:
         if self.player.running:
             self.player.stop()
         if self._maybe_discard():
+            self.hotkey_manager.stop()
+            if self._hotkey_after:
+                self.root.after_cancel(self._hotkey_after)
             self.root.destroy()
 
 

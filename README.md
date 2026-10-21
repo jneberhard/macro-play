@@ -10,6 +10,7 @@ Macro Play is a no-code desktop recorder for repetitive computer work. It captur
 - Tracks the active window's title, position, and size and restores it during playback.
 - Lets you add, edit, duplicate, reorder, disable, or delete actions without writing code.
 - Supports adjustable playback speed, pause/resume, up to 999 repeats, or looping until stopped.
+- Provides a selectable global Play hotkey that works while another application has focus.
 - Saves portable, human-readable `.macro.json` files for later recall.
 - Runs on Windows and macOS. Linux input works where the desktop session permits global hooks.
 
@@ -32,6 +33,8 @@ On macOS, grant **Accessibility** permission to Terminal (for source runs) or Ma
 4. Double-click timeline actions to review or edit them.
 5. Choose repeat count and playback speed, then press **Play**.
 6. Use **Save** to store the macro as a `.macro.json` file.
+
+Choose a shortcut from **Playback settings → Play hotkey** to start the current macro without returning to Macro Play. The default is **Ctrl+F9**, and the selection is remembered after restarting the app.
 
 Press **Ctrl+F8** at any time during playback for an emergency stop, even when another application has focus.
 
