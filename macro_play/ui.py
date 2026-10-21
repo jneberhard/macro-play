@@ -16,6 +16,7 @@ from .hotkeys import (
     hotkey_from_keypress,
     prepare_hotkey_assignments,
 )
+from .help_content import HELP_SECTIONS
 from .player import MacroPlayer
 from .recorder import MacroRecorder
 
@@ -396,6 +397,117 @@ class MacroHotkeyManagerDialog(tk.Toplevel):
         self.destroy()
 
 
+class HelpDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent)
+        self.title("Macro Play Help")
+        self.configure(bg=BG)
+        self.geometry("940x680")
+        self.minsize(720, 500)
+        self.transient(parent)
+        self.search_cursor = "1.0"
+        self.section_marks: dict[str, str] = {}
+
+        header = tk.Frame(self, bg=BG, padx=24, pady=18)
+        header.pack(fill="x")
+        tk.Label(header, text="Macro Play Help", bg=BG, fg=TEXT, font=("Segoe UI Semibold", 19)).pack(side="left")
+        ttk.Button(header, text="Close", command=self.destroy).pack(side="right")
+
+        search = tk.Frame(self, bg=PANEL, padx=18, pady=12, highlightbackground=BORDER, highlightthickness=1)
+        search.pack(fill="x", padx=24, pady=(0, 12))
+        tk.Label(search, text="Search manual", bg=PANEL, fg=MUTED, font=("Segoe UI Semibold", 9)).pack(side="left")
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(search, textvariable=self.search_var)
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=12)
+        ttk.Button(search, text="Find next", command=self._find_next).pack(side="left")
+        self.search_status = tk.Label(search, text="", bg=PANEL, fg=MUTED, width=12, anchor="w", font=("Segoe UI", 8))
+        self.search_status.pack(side="left", padx=(10, 0))
+        self.search_var.trace_add("write", lambda *_: self._reset_search())
+        self.search_entry.bind("<Return>", lambda _e: self._find_next())
+
+        content = tk.Frame(self, bg=BG)
+        content.pack(fill="both", expand=True, padx=24, pady=(0, 20))
+        content.rowconfigure(0, weight=1)
+        content.columnconfigure(1, weight=1)
+
+        nav = tk.Frame(content, bg=PANEL, width=210, padx=10, pady=10, highlightbackground=BORDER, highlightthickness=1)
+        nav.grid(row=0, column=0, sticky="ns", padx=(0, 12))
+        nav.grid_propagate(False)
+        tk.Label(nav, text="CONTENTS", bg=PANEL, fg=MUTED, font=("Segoe UI Semibold", 8)).pack(anchor="w", padx=4, pady=(2, 8))
+        self.section_list = tk.Listbox(
+            nav, bg=PANEL, fg=TEXT, selectbackground="#312a62", selectforeground="white",
+            activestyle="none", highlightthickness=0, borderwidth=0, font=("Segoe UI", 10),
+        )
+        self.section_list.pack(fill="both", expand=True)
+        self.section_list.bind("<<ListboxSelect>>", self._go_to_section)
+
+        article = tk.Frame(content, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        article.grid(row=0, column=1, sticky="nsew")
+        article.rowconfigure(0, weight=1)
+        article.columnconfigure(0, weight=1)
+        self.text = tk.Text(
+            article, bg=PANEL, fg=TEXT, insertbackground=TEXT, relief="flat", borderwidth=0,
+            padx=24, pady=20, wrap="word", font=("Segoe UI", 10), spacing1=2, spacing3=8,
+        )
+        self.text.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(article, orient="vertical", command=self.text.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.text.configure(yscrollcommand=scroll.set)
+        self.text.tag_configure("title", foreground="white", font=("Segoe UI Semibold", 17), spacing1=14, spacing3=9)
+        self.text.tag_configure("search", background="#f4c95d", foreground="#10131b")
+
+        for title, body in HELP_SECTIONS:
+            self.section_list.insert("end", title)
+            self.section_marks[title] = self.text.index("end-1c")
+            self.text.insert("end", f"{title}\n", "title")
+            self.text.insert("end", f"{body}\n\n")
+        self.text.configure(state="disabled")
+        self.section_list.selection_set(0)
+
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.bind("<Control-f>", self._focus_search)
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.update_idletasks()
+        self.geometry(f"+{parent.winfo_rootx()+100}+{parent.winfo_rooty()+45}")
+
+    def _go_to_section(self, _event: tk.Event | None = None) -> None:
+        selected = self.section_list.curselection()
+        if selected:
+            title = str(self.section_list.get(selected[0]))
+            self.text.see(self.section_marks[title])
+
+    def _focus_search(self, _event: tk.Event | None = None) -> str:
+        self.search_entry.focus_set()
+        self.search_entry.selection_range(0, "end")
+        return "break"
+
+    def _reset_search(self) -> None:
+        self.search_cursor = "1.0"
+        self.search_status.configure(text="")
+        self.text.tag_remove("search", "1.0", "end")
+
+    def _find_next(self) -> None:
+        term = self.search_var.get().strip()
+        if not term:
+            self._focus_search()
+            return
+        self.text.tag_remove("search", "1.0", "end")
+        found = self.text.search(term, self.search_cursor, nocase=True, stopindex="end")
+        wrapped = False
+        if not found and self.search_cursor != "1.0":
+            found = self.text.search(term, "1.0", nocase=True, stopindex=self.search_cursor)
+            wrapped = bool(found)
+        if not found:
+            self.search_status.configure(text="No matches", fg=RED)
+            self.search_cursor = "1.0"
+            return
+        end = f"{found}+{len(term)}c"
+        self.text.tag_add("search", found, end)
+        self.text.see(found)
+        self.search_cursor = end
+        self.search_status.configure(text="Wrapped" if wrapped else "Match found", fg=GREEN)
+
+
 class MacroPlayApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -415,6 +527,7 @@ class MacroPlayApp:
         self._hotkey_events: queue.SimpleQueue[str] = queue.SimpleQueue()
         self.hotkey_manager = GlobalHotkeyRegistry(self._hotkey_events.put)
         self.cursor_preview = CursorTargetPreview(root)
+        self.help_window: HelpDialog | None = None
         self._hotkey_after: str | None = None
         self._configure_styles()
         self._build_ui()
@@ -470,6 +583,7 @@ class MacroPlayApp:
         ttk.Button(controls, text="New", command=self._new).pack(side="left", padx=4)
         ttk.Button(controls, text="Open", command=self._open).pack(side="left", padx=4)
         ttk.Button(controls, text="Save", command=self._save).pack(side="left", padx=4)
+        ttk.Button(controls, text="Help", command=self._show_help).pack(side="left", padx=4)
         self.control_hint = tk.Label(controls, text="Record your workflow, then refine it below", bg=PANEL, fg=MUTED, font=("Segoe UI", 9))
         self.control_hint.pack(side="right")
 
@@ -567,7 +681,7 @@ class MacroPlayApp:
         footer.pack(fill="x")
         self.footer_label = tk.Label(footer, text="Tip: double-click any action to edit it. Press Ctrl+F8 for emergency stop.", bg=BG, fg=MUTED, font=("Segoe UI", 9))
         self.footer_label.pack(side="left")
-        tk.Label(footer, text="Ctrl+O Open   Ctrl+S Save   Delete Remove", bg=BG, fg="#617089", font=("Segoe UI", 8)).pack(side="right")
+        tk.Label(footer, text="F1 Help   Ctrl+O Open   Ctrl+S Save   Delete Remove", bg=BG, fg="#617089", font=("Segoe UI", 8)).pack(side="right")
 
     @staticmethod
     def _field_label(parent: tk.Misc, text: str) -> None:
@@ -579,6 +693,15 @@ class MacroPlayApp:
         self.root.bind("<Control-n>", lambda _e: self._new())
         self.root.bind("<Control-r>", lambda _e: self._record())
         self.root.bind("<F5>", lambda _e: self._play())
+        self.root.bind("<F1>", lambda _e: self._show_help())
+
+    def _show_help(self) -> None:
+        if self.help_window and self.help_window.winfo_exists():
+            self.help_window.deiconify()
+            self.help_window.lift()
+            self.help_window.focus_force()
+            return
+        self.help_window = HelpDialog(self.root)
 
     def _name_changed(self) -> None:
         if self.name_var.get() != self.macro.name:

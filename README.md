@@ -16,6 +16,7 @@ Macro Play is a no-code desktop recorder for repetitive computer work. It captur
 - Rejects invalid system-uptime values in recorded waits and repairs affected saved macros on load.
 - Shows a temporary crosshair at the recorded cursor coordinates when a mouse action is selected.
 - Saves portable, human-readable `.macro.json` files for later recall.
+- Includes a searchable in-app instruction manual, available from **Help** or **F1**.
 - Runs on Windows and macOS. Linux input works where the desktop session permits global hooks.
 
 ## Run from source
@@ -45,6 +46,8 @@ Under **Playback settings → Play hotkey**, click **Change** and physically pre
 To control several macros, save each recording first, then select **Saved macro hotkeys**. Choose **Add saved macro**, select its `.macro.json` file, and press the shortcut you want to assign. Repeat for every macro. While Macro Play is running, each shortcut plays its assigned file without replacing the macro currently open in the editor. Assigned macros use the repeat, loop, speed, and window-restore settings currently shown in the app.
 
 Press **Ctrl+F8** at any time during playback for an emergency stop, even when another application has focus.
+
+Select **Help** or press **F1** to open the complete searchable instruction manual. The same manual is also available in [USER_GUIDE.md](USER_GUIDE.md).
 
 ## Build a desktop app
 
