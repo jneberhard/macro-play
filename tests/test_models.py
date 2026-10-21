@@ -31,6 +31,10 @@ class MacroModelTests(unittest.TestCase):
         macro = Macro(actions=[Action("wait", delay=1, duration=2), Action("wait", duration=20, enabled=False)])
         self.assertEqual(macro.estimated_duration, 3)
 
+    def test_legacy_uptime_delay_is_repaired(self):
+        action = Action.from_dict({"kind": "mouse_click", "delay": 636652.77, "data": {}})
+        self.assertEqual(action.delay, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

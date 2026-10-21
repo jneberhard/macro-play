@@ -5,7 +5,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 import json
+import math
 import uuid
+
+
+LEGACY_INVALID_DELAY_SECONDS = 86_400.0
+
+
+def _clean_delay(value: Any) -> float:
+    try:
+        delay = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(delay) or delay < 0.0 or delay >= LEGACY_INVALID_DELAY_SECONDS:
+        return 0.0
+    return delay
 
 
 ACTION_LABELS = {
@@ -62,7 +76,7 @@ class Action:
     def from_dict(cls, raw: dict[str, Any]) -> "Action":
         return cls(
             kind=str(raw["kind"]),
-            delay=max(0.0, float(raw.get("delay", 0.0))),
+            delay=_clean_delay(raw.get("delay", 0.0)),
             duration=max(0.0, float(raw.get("duration", 0.0))),
             data=dict(raw.get("data", {})),
             id=str(raw.get("id") or uuid.uuid4().hex[:10]),

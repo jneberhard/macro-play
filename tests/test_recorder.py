@@ -54,6 +54,19 @@ class EventBuilderTests(unittest.TestCase):
         self.assertEqual(actions[0].kind, "text")
         self.assertEqual(actions[0].data["text"], "hello")
 
+    def test_invalid_clock_origin_becomes_zero_wait(self):
+        builder = EventBuilder(capture_windows=False)
+        builder._last = 0.0  # Reproduces an OS callback value being mistaken for a timestamp.
+        builder.mouse_scroll(20, 30, 0, -1, builder._started + 0.25)
+        actions = builder.finish()
+        self.assertEqual(actions[0].delay, 0.0)
+
+    def test_callback_metadata_cannot_replace_timestamp(self):
+        builder = EventBuilder(capture_windows=False)
+        builder.mouse_scroll(20, 30, 0, -1, 0.0)
+        actions = builder.finish()
+        self.assertLess(actions[0].delay, 0.1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import threading
 import time
 from typing import Callable
@@ -44,6 +45,31 @@ class EventBuilder:
         self._modifiers: set[str] = set()
         self._last_window_signature: tuple[object, ...] | None = None
 
+    def _timestamp(self, value: float | None) -> float:
+        """Keep callback metadata from being mistaken for a monotonic timestamp."""
+        current = time.monotonic()
+        if value is None:
+            return current
+        try:
+            candidate = float(value)
+        except (TypeError, ValueError):
+            return current
+        if not math.isfinite(candidate) or candidate < self._started - 1.0 or candidate > current + 60.0:
+            return current
+        return candidate
+
+    def _delay(self, at: float) -> float:
+        raw = at - self._last
+        recording_age = max(0.0, at - self._started)
+        if not math.isfinite(raw) or raw < 0.0 or raw > recording_age + 1.0:
+            return 0.0
+        return raw
+
+    @staticmethod
+    def _elapsed(start: float, end: float) -> float:
+        value = end - start
+        return value if math.isfinite(value) and value >= 0.0 else 0.0
+
     def _is_app_window(self) -> bool:
         state = foreground_window()
         return bool(state and self.excluded_title.lower() in state.title.lower())
@@ -56,7 +82,7 @@ class EventBuilder:
             return True
         signature = (state.title, state.x, state.y, state.width, state.height, state.app)
         if signature != self._last_window_signature:
-            self.actions.append(Action("window", delay=max(0.0, now - self._last), data=state.to_dict()))
+            self.actions.append(Action("window", delay=self._delay(now), data=state.to_dict()))
             self._last = now
             self._last_window_signature = signature
         return True
@@ -68,8 +94,8 @@ class EventBuilder:
         self.actions.append(
             Action(
                 "mouse_move",
-                delay=max(0.0, move.first - self._last),
-                duration=max(0.0, move.last - move.first),
+                delay=self._delay(move.first),
+                duration=self._elapsed(move.first, move.last),
                 data={"x": move.x, "y": move.y},
             )
         )
@@ -82,8 +108,8 @@ class EventBuilder:
         self.actions.append(
             Action(
                 "text",
-                delay=max(0.0, self._text_first - self._last),
-                duration=max(0.0, self._text_last - self._text_first),
+                delay=self._delay(self._text_first),
+                duration=self._elapsed(self._text_first, self._text_last),
                 data={"text": self._text},
             )
         )
@@ -91,7 +117,7 @@ class EventBuilder:
         self._text = ""
 
     def mouse_move(self, x: int, y: int, now: float | None = None) -> None:
-        now = time.monotonic() if now is None else now
+        now = self._timestamp(now)
         with self._lock:
             if self._is_app_window():
                 return
@@ -104,7 +130,7 @@ class EventBuilder:
                 self.actions.append(
                     Action(
                         "mouse_down",
-                        delay=max(0.0, click.at - self._last),
+                        delay=self._delay(click.at),
                         data={"x": click.x, "y": click.y, "button": click.button},
                     )
                 )
@@ -120,7 +146,7 @@ class EventBuilder:
                 self._move.y = int(y)
 
     def mouse_click(self, x: int, y: int, button: str, pressed: bool, now: float | None = None) -> None:
-        now = time.monotonic() if now is None else now
+        now = self._timestamp(now)
         with self._lock:
             if self._is_app_window():
                 return
@@ -137,7 +163,7 @@ class EventBuilder:
                     self.actions.append(
                         Action(
                             "mouse_up",
-                            delay=max(0.0, now - self._last),
+                            delay=self._delay(now),
                             data={"x": int(x), "y": int(y), "button": button},
                         )
                     )
@@ -145,8 +171,8 @@ class EventBuilder:
                     self.actions.append(
                         Action(
                             "mouse_click",
-                            delay=max(0.0, click.at - self._last),
-                            duration=max(0.0, now - click.at),
+                            delay=self._delay(click.at),
+                            duration=self._elapsed(click.at, now),
                             data={"x": int(x), "y": int(y), "button": button},
                         )
                     )
@@ -154,7 +180,7 @@ class EventBuilder:
             self._click = None
 
     def mouse_scroll(self, x: int, y: int, dx: int, dy: int, now: float | None = None) -> None:
-        now = time.monotonic() if now is None else now
+        now = self._timestamp(now)
         with self._lock:
             if self._is_app_window():
                 return
@@ -165,14 +191,14 @@ class EventBuilder:
             self.actions.append(
                 Action(
                     "mouse_scroll",
-                    delay=max(0.0, now - self._last),
+                    delay=self._delay(now),
                     data={"x": int(x), "y": int(y), "dx": int(dx), "dy": int(dy)},
                 )
             )
             self._last = now
 
     def key_down(self, key: str, char: str | None, now: float | None = None) -> None:
-        now = time.monotonic() if now is None else now
+        now = self._timestamp(now)
         with self._lock:
             if self._is_app_window():
                 return
@@ -192,13 +218,13 @@ class EventBuilder:
             self._flush_text()
             if not self._window(now):
                 return
-            self.actions.append(Action("key_down", delay=max(0.0, now - self._last), data={"key": key}))
+            self.actions.append(Action("key_down", delay=self._delay(now), data={"key": key}))
             self._last = now
             if is_modifier:
                 self._modifiers.add(key)
 
     def key_up(self, key: str, char: str | None, now: float | None = None) -> None:
-        now = time.monotonic() if now is None else now
+        now = self._timestamp(now)
         with self._lock:
             if self._is_app_window():
                 return
@@ -208,7 +234,7 @@ class EventBuilder:
             self._flush_move()
             if not self._window(now):
                 return
-            self.actions.append(Action("key_up", delay=max(0.0, now - self._last), data={"key": key}))
+            self.actions.append(Action("key_up", delay=self._delay(now), data={"key": key}))
             self._last = now
             self._modifiers.discard(key)
 
@@ -221,11 +247,15 @@ class EventBuilder:
                 self.actions.append(
                     Action(
                         "mouse_down",
-                        delay=max(0.0, click.at - self._last),
+                        delay=self._delay(click.at),
                         data={"x": click.x, "y": click.y, "button": click.button},
                     )
                 )
                 self._click = None
+            maximum_possible_delay = max(1.0, time.monotonic() - self._started + 1.0)
+            for action in self.actions:
+                if not math.isfinite(action.delay) or action.delay > maximum_possible_delay:
+                    action.delay = 0.0
             return list(self.actions)
 
 
