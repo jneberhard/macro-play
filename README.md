@@ -11,6 +11,7 @@ Macro Play is a no-code desktop recorder for repetitive computer work. It captur
 - Lets you add, edit, duplicate, reorder, disable, or delete actions without writing code.
 - Supports adjustable playback speed, pause/resume, up to 999 repeats, or looping until stopped.
 - Provides a selectable global Play hotkey that works while another application has focus.
+- Assigns separate global hotkeys to any number of saved macros, so the right workflow plays instantly.
 - Rejects invalid system-uptime values in recorded waits and repairs affected saved macros on load.
 - Shows a temporary crosshair at the recorded cursor coordinates when a mouse action is selected.
 - Saves portable, human-readable `.macro.json` files for later recall.
@@ -37,6 +38,8 @@ On macOS, grant **Accessibility** permission to Terminal (for source runs) or Ma
 6. Use **Save** to store the macro as a `.macro.json` file.
 
 Under **Playback settings → Play hotkey**, click **Change** and physically press the shortcut you want. Macro Play accepts modifier combinations, function keys, and navigation keys. The default is **Ctrl+F9**, and your selection is remembered after restarting the app.
+
+To control several macros, save each recording first, then select **Saved macro hotkeys**. Choose **Add saved macro**, select its `.macro.json` file, and press the shortcut you want to assign. Repeat for every macro. While Macro Play is running, each shortcut plays its assigned file without replacing the macro currently open in the editor. Assigned macros use the repeat, loop, speed, and window-restore settings currently shown in the app.
 
 Press **Ctrl+F8** at any time during playback for an emergency stop, even when another application has focus.
 

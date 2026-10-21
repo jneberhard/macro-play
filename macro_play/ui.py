@@ -4,11 +4,18 @@ import json
 from pathlib import Path
 import queue
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, ttk
-from typing import Callable
+from tkinter import filedialog, messagebox, ttk
 
 from .models import ACTION_LABELS, Action, Macro
-from .hotkeys import AppSettings, GlobalPlayHotkey, MODIFIER_KEYSYMS, MODIFIER_ORDER, hotkey_from_keypress
+from .hotkeys import (
+    AppSettings,
+    GlobalHotkeyRegistry,
+    MacroHotkeyBinding,
+    MODIFIER_KEYSYMS,
+    MODIFIER_ORDER,
+    hotkey_from_keypress,
+    prepare_hotkey_assignments,
+)
 from .player import MacroPlayer
 from .recorder import MacroRecorder
 
@@ -261,6 +268,134 @@ class HotkeyCaptureDialog(tk.Toplevel):
         return "break"
 
 
+class MacroHotkeyManagerDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Misc, bindings: list[MacroHotkeyBinding], current_hotkey: str) -> None:
+        super().__init__(parent)
+        self.title("Saved macro hotkeys")
+        self.configure(bg=PANEL)
+        self.geometry("760x430")
+        self.minsize(650, 360)
+        self.transient(parent)
+        self.grab_set()
+        self.current_hotkey = current_hotkey
+        self.bindings = [
+            MacroHotkeyBinding(item.hotkey, item.macro_path, item.macro_name, item.id)
+            for item in bindings
+        ]
+        self.result: list[MacroHotkeyBinding] | None = None
+
+        body = tk.Frame(self, bg=PANEL, padx=24, pady=20)
+        body.pack(fill="both", expand=True)
+        tk.Label(body, text="Saved macro hotkeys", bg=PANEL, fg=TEXT, font=("Segoe UI Semibold", 16)).pack(anchor="w")
+        tk.Label(
+            body,
+            text="Assign a different shortcut to each saved macro. Macro Play must be running for these shortcuts to work.",
+            bg=PANEL, fg=MUTED, font=("Segoe UI", 9), wraplength=680, justify="left",
+        ).pack(anchor="w", pady=(5, 14))
+
+        table = tk.Frame(body, bg=PANEL)
+        table.pack(fill="both", expand=True)
+        table.rowconfigure(0, weight=1)
+        table.columnconfigure(0, weight=1)
+        self.tree = ttk.Treeview(table, columns=("hotkey", "name", "file"), show="headings", selectmode="browse")
+        for key, label, width in (("hotkey", "HOTKEY", 145), ("name", "MACRO", 190), ("file", "SAVED FILE", 330)):
+            self.tree.heading(key, text=label)
+            self.tree.column(key, width=width, minwidth=80, stretch=(key == "file"))
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(table, orient="vertical", command=self.tree.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.bind("<Double-1>", lambda _e: self._change_hotkey())
+
+        tools = tk.Frame(body, bg=PANEL)
+        tools.pack(fill="x", pady=(12, 0))
+        ttk.Button(tools, text="＋ Add saved macro", command=self._add).pack(side="left")
+        ttk.Button(tools, text="Change hotkey", command=self._change_hotkey).pack(side="left", padx=8)
+        ttk.Button(tools, text="Remove", command=self._remove).pack(side="left")
+        ttk.Button(tools, text="Save", style="Accent.TButton", command=self._save).pack(side="right")
+        ttk.Button(tools, text="Cancel", command=self.destroy).pack(side="right", padx=8)
+
+        self._refresh()
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.update_idletasks()
+        self.geometry(f"+{parent.winfo_rootx()+190}+{parent.winfo_rooty()+120}")
+        self.wait_window()
+
+    def _refresh(self, selected_id: str | None = None) -> None:
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        for binding in self.bindings:
+            path = Path(binding.macro_path)
+            filename = path.name if path.exists() else f"Missing — {path.name}"
+            self.tree.insert("", "end", iid=binding.id, values=(binding.hotkey, binding.macro_name, filename))
+        if selected_id and self.tree.exists(selected_id):
+            self.tree.selection_set(selected_id)
+            self.tree.see(selected_id)
+
+    def _selected(self) -> MacroHotkeyBinding | None:
+        selection = self.tree.selection()
+        if not selection:
+            return None
+        return next((item for item in self.bindings if item.id == selection[0]), None)
+
+    def _capture_unique_hotkey(self, excluding: str | None = None) -> str | None:
+        dialog = HotkeyCaptureDialog(self)
+        if not dialog.result:
+            return None
+        assignments = {"current": self.current_hotkey, "candidate": dialog.result}
+        assignments.update({item.id: item.hotkey for item in self.bindings if item.id != excluding})
+        try:
+            prepare_hotkey_assignments(assignments)
+        except ValueError as exc:
+            messagebox.showerror("Hotkey already used", str(exc), parent=self)
+            return None
+        return dialog.result
+
+    def _add(self) -> None:
+        chosen = filedialog.askopenfilename(
+            parent=self,
+            title="Choose a saved macro",
+            filetypes=[("Macro Play files", "*.macro.json"), ("JSON files", "*.json"), ("All files", "*.*")],
+        )
+        if not chosen:
+            return
+        try:
+            macro = Macro.load(chosen)
+        except (OSError, ValueError, KeyError) as exc:
+            messagebox.showerror("Could not open macro", str(exc), parent=self)
+            return
+        resolved = str(Path(chosen).resolve())
+        existing = next((item for item in self.bindings if Path(item.macro_path) == Path(resolved)), None)
+        if existing:
+            messagebox.showinfo("Macro already added", "That saved macro already has a hotkey.", parent=self)
+            self._refresh(existing.id)
+            return
+        hotkey = self._capture_unique_hotkey()
+        if hotkey:
+            item = MacroHotkeyBinding(hotkey=hotkey, macro_path=resolved, macro_name=macro.name)
+            self.bindings.append(item)
+            self._refresh(item.id)
+
+    def _change_hotkey(self) -> None:
+        selected = self._selected()
+        if not selected:
+            return
+        hotkey = self._capture_unique_hotkey(excluding=selected.id)
+        if hotkey:
+            selected.hotkey = hotkey
+            self._refresh(selected.id)
+
+    def _remove(self) -> None:
+        selected = self._selected()
+        if selected:
+            self.bindings = [item for item in self.bindings if item.id != selected.id]
+            self._refresh()
+
+    def _save(self) -> None:
+        self.result = self.bindings
+        self.destroy()
+
+
 class MacroPlayApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -273,15 +408,18 @@ class MacroPlayApp:
         self.dirty = False
         self.recorder: MacroRecorder | None = None
         self.player = MacroPlayer()
+        self._playback_actions: list[Action] = []
+        self._playback_name = ""
+        self._highlight_playback = True
         self.settings = AppSettings.load()
         self._hotkey_events: queue.SimpleQueue[str] = queue.SimpleQueue()
-        self.hotkey_manager = GlobalPlayHotkey(lambda: self._hotkey_events.put("play"))
+        self.hotkey_manager = GlobalHotkeyRegistry(self._hotkey_events.put)
         self.cursor_preview = CursorTargetPreview(root)
         self._hotkey_after: str | None = None
         self._configure_styles()
         self._build_ui()
         self._bind_shortcuts()
-        self._register_play_hotkey(show_error=False, persist=False)
+        self._configure_hotkeys(show_error=False, persist=False)
         self._hotkey_after = self.root.after(75, self._poll_hotkeys)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self._refresh()
@@ -404,7 +542,7 @@ class MacroPlayApp:
         self.restore_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(side, text="Restore window positions", variable=self.restore_var).pack(anchor="w", pady=(4, 8))
         tk.Label(side, text="Re-focuses and resizes recorded windows before their actions run.", wraplength=215, justify="left", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w")
-        self._field_label(side, "Play hotkey")
+        self._field_label(side, "Current macro hotkey")
         self.play_hotkey_var = tk.StringVar(value=self.settings.play_hotkey)
         hotkey_row = tk.Frame(side, bg=PANEL)
         hotkey_row.pack(fill="x", pady=(4, 4))
@@ -414,7 +552,10 @@ class MacroPlayApp:
         disable_link.pack(anchor="w")
         disable_link.bind("<Button-1>", lambda _e: self._disable_play_hotkey())
         tk.Label(side, text="Press the combination you want. It works from any application.", wraplength=215, justify="left", bg=PANEL, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w", pady=(2, 0))
-        ttk.Separator(side).pack(fill="x", pady=20)
+        self.macro_hotkeys_btn = ttk.Button(side, text="", command=self._manage_macro_hotkeys)
+        self.macro_hotkeys_btn.pack(fill="x", pady=(10, 0))
+        self._update_macro_hotkeys_label()
+        ttk.Separator(side).pack(fill="x", pady=14)
         self._field_label(side, "Progress")
         self.progress = ttk.Progressbar(side, mode="determinate", maximum=100)
         self.progress.pack(fill="x", pady=(8, 6))
@@ -446,40 +587,72 @@ class MacroPlayApp:
     def _update_speed(self) -> None:
         self.speed_label.configure(text=f"{self.speed_var.get():.1f}×")
 
-    def _register_play_hotkey(self, *, show_error: bool, persist: bool = True) -> None:
-        selection = self.play_hotkey_var.get()
-        previous = self.hotkey_manager.selection
+    def _hotkey_assignments(self) -> dict[str, str]:
+        return {
+            "current": self.play_hotkey_var.get(),
+            **{item.id: item.hotkey for item in self.settings.macro_hotkeys},
+        }
+
+    def _configure_hotkeys(self, *, show_error: bool, persist: bool = True) -> bool:
+        previous_assignments = dict(self.hotkey_manager.assignments)
+        previous_play_hotkey = self.settings.play_hotkey
         try:
-            self.hotkey_manager.configure(selection)
-            self.settings.play_hotkey = selection
+            self.hotkey_manager.configure(self._hotkey_assignments())
+            self.settings.play_hotkey = self.play_hotkey_var.get()
             if persist:
                 self.settings.save()
-            self.control_hint.configure(text=f"Global Play hotkey: {selection}")
+            count = len(self.settings.macro_hotkeys)
+            self.control_hint.configure(text=f"{count + (self.settings.play_hotkey != 'Disabled')} global macro hotkey(s) active")
+            self._update_macro_hotkeys_label()
+            return True
         except (OSError, RuntimeError, ValueError) as exc:
-            self.play_hotkey_var.set(previous)
+            self.settings.play_hotkey = previous_play_hotkey
+            self.play_hotkey_var.set(previous_play_hotkey)
             try:
-                self.hotkey_manager.configure(previous)
+                self.hotkey_manager.configure(previous_assignments)
             except (RuntimeError, ValueError):
                 self.hotkey_manager.stop()
             if show_error:
-                messagebox.showerror("Hotkey unavailable", str(exc))
+                messagebox.showerror("Hotkey unavailable", str(exc), parent=self.root)
+            return False
 
     def _choose_play_hotkey(self) -> None:
         dialog = HotkeyCaptureDialog(self.root)
         if dialog.result:
             self.play_hotkey_var.set(dialog.result)
-            self._register_play_hotkey(show_error=True)
+            self._configure_hotkeys(show_error=True)
 
     def _disable_play_hotkey(self) -> None:
         self.play_hotkey_var.set("Disabled")
-        self._register_play_hotkey(show_error=True)
+        self._configure_hotkeys(show_error=True)
+
+    def _update_macro_hotkeys_label(self) -> None:
+        if hasattr(self, "macro_hotkeys_btn"):
+            count = len(self.settings.macro_hotkeys)
+            self.macro_hotkeys_btn.configure(text=f"Saved macro hotkeys ({count})…")
+
+    def _manage_macro_hotkeys(self) -> None:
+        old_bindings = self.settings.macro_hotkeys
+        dialog = MacroHotkeyManagerDialog(self.root, old_bindings, self.play_hotkey_var.get())
+        if dialog.result is None:
+            return
+        self.settings.macro_hotkeys = dialog.result
+        if not self._configure_hotkeys(show_error=True):
+            self.settings.macro_hotkeys = old_bindings
+            self._configure_hotkeys(show_error=False, persist=False)
 
     def _poll_hotkeys(self) -> None:
         try:
             while True:
-                event = self._hotkey_events.get_nowait()
-                if event == "play" and not self.player.running and not (self.recorder and self.recorder.running):
+                token = self._hotkey_events.get_nowait()
+                if self.player.running or (self.recorder and self.recorder.running):
+                    continue
+                if token == "current":
                     self._play()
+                else:
+                    binding = next((item for item in self.settings.macro_hotkeys if item.id == token), None)
+                    if binding:
+                        self._play_saved_macro(binding)
         except queue.Empty:
             pass
         self._hotkey_after = self.root.after(75, self._poll_hotkeys)
@@ -542,9 +715,30 @@ class MacroPlayApp:
     def _play(self) -> None:
         if self.player.running or not self.macro.actions:
             return
+        self._start_playback(self.macro.actions, self.macro.name, highlight=True)
+
+    def _play_saved_macro(self, binding: MacroHotkeyBinding) -> None:
+        try:
+            macro = Macro.load(binding.macro_path)
+        except (OSError, ValueError, KeyError) as exc:
+            messagebox.showerror(
+                "Could not play saved macro",
+                f"{binding.macro_name}\n\n{exc}",
+                parent=self.root,
+            )
+            return
+        if not macro.actions:
+            messagebox.showinfo("Macro is empty", f"{macro.name} has no actions to play.", parent=self.root)
+            return
+        self._start_playback(macro.actions, macro.name, highlight=False)
+
+    def _start_playback(self, actions: list[Action], name: str, *, highlight: bool) -> None:
+        self._playback_actions = list(actions)
+        self._playback_name = name
+        self._highlight_playback = highlight
         self._set_controls_playing(True)
         self.player.play(
-            self.macro.actions,
+            self._playback_actions,
             repeats=0 if self.loop_var.get() else self.repeat_var.get(),
             speed=self.speed_var.get(),
             restore_windows=self.restore_var.get(),
@@ -571,11 +765,14 @@ class MacroPlayApp:
 
     def _play_progress(self, index: int, total: int, loop: int) -> None:
         self.progress["value"] = ((index + 1) / max(1, total)) * 100
-        self.progress_label.configure(text=f"Repeat {loop + 1}  •  Action {index + 1} of {total}")
+        prefix = f"{self._playback_name}  •  " if self._playback_name else ""
+        self.progress_label.configure(text=f"{prefix}Repeat {loop + 1}  •  Action {index + 1} of {total}")
+        if not self._highlight_playback:
+            return
         for item in self.tree.get_children():
             tags = tuple(tag for tag in self.tree.item(item, "tags") if tag != "active")
             self.tree.item(item, tags=tags)
-        enabled = [a for a in self.macro.actions if a.enabled]
+        enabled = [a for a in self._playback_actions if a.enabled]
         if 0 <= index < len(enabled) and self.tree.exists(enabled[index].id):
             tags = tuple(self.tree.item(enabled[index].id, "tags")) + ("active",)
             self.tree.item(enabled[index].id, tags=tags)
@@ -586,6 +783,9 @@ class MacroPlayApp:
         self.status_badge.configure(text="●  READY", bg="#152a27", fg=GREEN)
         self.progress["value"] = 0
         self.progress_label.configure(text="Ready to play")
+        self._playback_actions = []
+        self._playback_name = ""
+        self._highlight_playback = True
         self._refresh()
         if error:
             messagebox.showerror("Playback stopped", error)

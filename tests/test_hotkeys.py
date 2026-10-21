@@ -2,7 +2,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from macro_play.hotkeys import AppSettings, DEFAULT_PLAY_HOTKEY, display_to_binding, hotkey_from_keypress
+from macro_play.hotkeys import (
+    AppSettings,
+    DEFAULT_PLAY_HOTKEY,
+    MacroHotkeyBinding,
+    display_to_binding,
+    hotkey_from_keypress,
+    prepare_hotkey_assignments,
+)
 
 
 class HotkeySettingsTests(unittest.TestCase):
@@ -31,6 +38,46 @@ class HotkeySettingsTests(unittest.TestCase):
             AppSettings(play_hotkey="Ctrl + Alt + P").save(path)
             restored = AppSettings.load(path)
         self.assertEqual(restored.play_hotkey, "Ctrl + Alt + P")
+
+    def test_multiple_macro_hotkeys_round_trip(self):
+        bindings = [
+            MacroHotkeyBinding("Ctrl + Alt + A", r"C:\macros\alpha.macro.json", "Alpha", "alpha"),
+            MacroHotkeyBinding("F10", r"C:\macros\beta.macro.json", "Beta", "beta"),
+        ]
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            path = Path(folder) / "settings.json"
+            AppSettings(play_hotkey="Disabled", macro_hotkeys=bindings).save(path)
+            restored = AppSettings.load(path)
+        self.assertEqual(restored.play_hotkey, "Disabled")
+        self.assertEqual([(item.id, item.hotkey, item.macro_name) for item in restored.macro_hotkeys], [
+            ("alpha", "Ctrl + Alt + A", "Alpha"),
+            ("beta", "F10", "Beta"),
+        ])
+
+    def test_duplicate_assignments_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "already assigned"):
+            prepare_hotkey_assignments({"current": "Ctrl + Alt + A", "saved": "Ctrl + Alt + A"})
+
+    def test_disabled_assignment_is_ignored(self):
+        self.assertEqual(
+            prepare_hotkey_assignments({"current": "Disabled", "saved": "F10"}),
+            {"<f10>": "saved"},
+        )
+
+    def test_invalid_and_duplicate_saved_bindings_are_skipped(self):
+        payload = """{
+          "play_hotkey": "Ctrl + Alt + A",
+          "macro_hotkeys": [
+            {"id": "duplicate", "hotkey": "Ctrl + Alt + A", "macro_path": "one.json", "macro_name": "One"},
+            {"id": "invalid", "hotkey": "Ctrl + F8", "macro_path": "two.json", "macro_name": "Two"},
+            {"id": "valid", "hotkey": "F10", "macro_path": "three.json", "macro_name": "Three"}
+          ]
+        }"""
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:
+            path = Path(folder) / "settings.json"
+            path.write_text(payload, encoding="utf-8")
+            restored = AppSettings.load(path)
+        self.assertEqual([item.id for item in restored.macro_hotkeys], ["valid"])
 
     def test_invalid_saved_selection_uses_default(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as folder:

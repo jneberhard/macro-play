@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import json
 import os
 from pathlib import Path
 import sys
 from typing import Callable, Iterable
+import uuid
 
 
 DEFAULT_PLAY_HOTKEY = "Ctrl + F9"
@@ -95,18 +96,57 @@ def default_settings_path() -> Path:
 
 
 @dataclass(slots=True)
+class MacroHotkeyBinding:
+    hotkey: str
+    macro_path: str
+    macro_name: str
+    id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, object]) -> "MacroHotkeyBinding":
+        hotkey = str(raw.get("hotkey", ""))
+        display_to_binding(hotkey)
+        macro_path = str(raw.get("macro_path", "")).strip()
+        if not macro_path:
+            raise ValueError("A macro hotkey must reference a saved macro file.")
+        return cls(
+            hotkey=hotkey,
+            macro_path=macro_path,
+            macro_name=str(raw.get("macro_name", "Saved macro")),
+            id=str(raw.get("id") or uuid.uuid4().hex[:10]),
+        )
+
+
+@dataclass(slots=True)
 class AppSettings:
     play_hotkey: str = DEFAULT_PLAY_HOTKEY
+    macro_hotkeys: list[MacroHotkeyBinding] = field(default_factory=list)
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppSettings":
         path = path or default_settings_path()
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise ValueError("Settings must be a JSON object.")
             hotkey = str(raw.get("play_hotkey", DEFAULT_PLAY_HOTKEY))
             display_to_binding(hotkey)
-            return cls(play_hotkey=hotkey)
-        except (OSError, ValueError, TypeError):
+            macro_hotkeys = []
+            used_bindings = {display_to_binding(hotkey)} - {None}
+            for item in raw.get("macro_hotkeys", []):
+                try:
+                    if not isinstance(item, dict):
+                        continue
+                    candidate = MacroHotkeyBinding.from_dict(item)
+                    binding = display_to_binding(candidate.hotkey)
+                    if binding is None or binding in used_bindings:
+                        continue
+                    used_bindings.add(binding)
+                    macro_hotkeys.append(candidate)
+                except (AttributeError, TypeError, ValueError):
+                    continue
+            return cls(play_hotkey=hotkey, macro_hotkeys=macro_hotkeys)
+        except (AttributeError, OSError, ValueError, TypeError):
             return cls()
 
     def save(self, path: Path | None = None) -> None:
@@ -115,25 +155,42 @@ class AppSettings:
         path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
 
 
-class GlobalPlayHotkey:
-    """Owns the app-wide playback shortcut listener."""
+def prepare_hotkey_assignments(assignments: dict[str, str]) -> dict[str, str]:
+    """Convert token/display assignments into unique pynput binding/token pairs."""
+    prepared: dict[str, str] = {}
+    for token, display in assignments.items():
+        binding = display_to_binding(display)
+        if binding is None:
+            continue
+        if binding in prepared:
+            raise ValueError(f"{display} is already assigned to another macro.")
+        prepared[binding] = token
+    return prepared
 
-    def __init__(self, callback: Callable[[], None]) -> None:
+
+class GlobalHotkeyRegistry:
+    """Owns all app-wide macro playback shortcuts."""
+
+    def __init__(self, callback: Callable[[str], None]) -> None:
         self.callback = callback
         self.listener = None
-        self.selection = "Disabled"
+        self.assignments: dict[str, str] = {}
 
-    def configure(self, selection: str) -> None:
+    def configure(self, assignments: dict[str, str]) -> None:
         self.stop()
-        binding = display_to_binding(selection)
-        self.selection = selection
-        if binding is None:
+        prepared = prepare_hotkey_assignments(assignments)
+        self.assignments = dict(assignments)
+        if not prepared:
             return
         try:
             from pynput import keyboard
         except ImportError as exc:
             raise RuntimeError("pynput is required for global hotkeys.") from exc
-        self.listener = keyboard.GlobalHotKeys({binding: self.callback})
+        callbacks = {
+            binding: (lambda assignment_token=token: self.callback(assignment_token))
+            for binding, token in prepared.items()
+        }
+        self.listener = keyboard.GlobalHotKeys(callbacks)
         self.listener.start()
 
     def stop(self) -> None:
